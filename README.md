@@ -1,17 +1,44 @@
 # ProjectMatchAI
 
-ProjectMatchAI is an AI-powered student-mentor matching platform that matches students to projects based on growth potential rather than just pre-existing skills, incorporating explainable AI candidate ranking, automated resume parsing, interactive learning roadmaps, and realtime chat.
+ProjectMatchAI is a standalone upload-and-review app for AI-assisted student/project matching.
+
+For the current MVP, the frontend is only the operator surface: upload inputs, review validation issues, start matching, and inspect/export results. The backend owns Excel parsing, validation, normalization, resume enrichment, matching, scoring, and explanations.
+
+Longer term, the same backend boundary can plug into a larger program-management system.
+
+---
+
+## Current Scope
+
+In scope for the next phases:
+
+- Import candidate, mentor, and project workbooks.
+- Link optional resume PDFs to candidate records.
+- Validate messy rows and show actionable issues.
+- Normalize students, mentors, projects, skills, and prerequisites.
+- Run explicit match jobs.
+- Show ranked matches by mentor/project with score breakdowns and explanations.
+- Export results as JSON and XLSX.
+
+Deferred:
+
+- Student accounts.
+- Mentor accounts.
+- Chat.
+- Notifications.
+- Admin portal.
+- Automatic final allocation.
 
 ---
 
 ## Repository Structure
 
-```
+```text
 projectmatchai/
-├── backend/                    # FastAPI application
-├── frontend/                   # Vite + React SPA (TypeScript)
-├── specs/                      # Project constitution and specifications
-└── docker-compose.yml          # Local Postgres + pgvector & Ollama
+  backend/        FastAPI backend
+  frontend/       Vite React operator console
+  specs/          Product, architecture, feature, and validation specs
+  docker-compose.yml
 ```
 
 ---
@@ -20,113 +47,95 @@ projectmatchai/
 
 ### Prerequisites
 
-- **Docker Desktop**
-- **Python 3.11+** and **Poetry**
-- **Node.js 18+** and **npm**
+- Docker Desktop
+- Python 3.11+
+- Node.js 18+ and npm
 
----
-
-### Step 1: Start Infrastructure Containers
-
-Launch local PostgreSQL (with `pgvector`) and Ollama services:
+### 1. Start Infrastructure
 
 ```bash
 docker compose up -d
 ```
 
-Verify the database is online:
+Verify PostgreSQL:
 
 ```bash
 docker exec -it projectmatchai-db pg_isready
 ```
 
----
+### 2. Configure Environment
 
-### Step 2: Configure Environment Variables
+Create `.env` from `.env.example` if present, then set any local overrides needed for database or AI providers.
 
-Copy the template environment file:
+### 3. Backend
 
 ```bash
-cp .env.example .env
+cd backend
+python -m venv .venv
+.\.venv\Scripts\activate
+pip install -r requirements-dev.txt
+uvicorn app.main:app --reload --port 8000
 ```
 
-Update any required API keys or port settings in the newly created `.env` file.
+API docs:
 
----
-
-### Step 3: Backend Setup & Running
-
-1. Navigate to the backend directory:
-   ```bash
-   cd backend
-   ```
-2. Install virtual environment and packages using Poetry:
-   ```bash
-   poetry install
-   ```
-3. Run migrations (applied in Phase 1):
-   ```bash
-   poetry run alembic upgrade head
-   ```
-4. Start the FastAPI development server:
-   ```bash
-   poetry run uvicorn app.main:app --reload --port 8000
-   ```
-   _The API docs will be available at [http://localhost:8000/docs](http://localhost:8000/docs)._
-
----
-
-### Step 4: Frontend Setup & Running
-
-1. Navigate to the frontend directory:
-   ```bash
-   cd ../frontend
-   ```
-2. Install node dependencies:
-   ```bash
-   npm install
-   ```
-3. Start the Vite React development client:
-   ```bash
-   npm run dev
-   ```
-   _The frontend dashboard will be available at [http://localhost:5173](http://localhost:5173)._
-
----
-
-## Code Quality & Pre-commit Hooks
-
-To enforce linting, formatting, and type-checks before commits:
-
-1. Install pre-commit globally or in your environment:
-   ```bash
-   pip install pre-commit
-   ```
-2. Set up pre-commit hooks in the repository:
-   ```bash
-   pre-commit install
-   ```
-3. Run checks manually on all files:
-   ```bash
-   pre-commit run --all-files
-   ```
-
----
-
-## Running Tests
-
-### Backend Tests
-
-Execute pytest suite inside the `/backend` directory:
-
-```bash
-poetry run pytest
+```text
+http://localhost:8000/docs
 ```
 
-### Frontend Tests
+Health check:
 
-Execute Vitest test suite inside the `/frontend` directory:
+```text
+http://localhost:8000/api/health
+```
+
+### 4. Frontend
 
 ```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Frontend:
+
+```text
+http://localhost:5173
+```
+
+---
+
+## Quality Checks
+
+Backend:
+
+```bash
+cd backend
+pytest
+ruff check .
+```
+
+Frontend:
+
+```bash
+cd frontend
+npm run lint
+npm run build
 npm run test
 ```
+
+---
+
+## Specs
+
+Start here before implementing any phase:
+
+- `specs/00-principles.md`
+- `specs/mission.md`
+- `specs/tech-stack.md`
+- `specs/roadmap.md`
+- `specs/adrs/ADR-0001-bulk-intake-matching-subsystem.md`
+- `specs/features/2026-06-26-bulk-intake-and-matching/requirements.md`
+- `specs/apis/bulk-intake-and-matching-api.md`
+
+Architecture changes require an ADR before production code.

@@ -20,4 +20,4 @@ def test_settings_load():
 def test_settings_invalid_provider():
     """Verify that invalid literals raise Pydantic validation errors."""
     with pytest.raises(ValidationError):
-        Settings(LLM_PROVIDER="unsupported_provider")  # Only 'groq' or 'ollama' allowed
+        Settings(LLM_PROVIDER="unsupported_provider")  # type: ignore

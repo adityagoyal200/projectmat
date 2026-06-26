@@ -33,7 +33,7 @@ repos:
 
       - id: pyright
         name: pyright
-        entry: C:/Users/goyal/AppData/Local/Python/pythoncore-3.14-64/Scripts/poetry.exe --directory backend run pyright app
+        entry: .venv/Scripts/pyright.exe -p backend
         language: system
         types: [python]
         pass_filenames: false
