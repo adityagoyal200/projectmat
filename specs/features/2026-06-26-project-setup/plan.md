@@ -23,7 +23,7 @@ This plan details the step-by-step actions required to establish the project ske
 
 ## 3. Backend Foundation
 
-- [ ] Initialize Poetry virtual environment and configure `pyproject.toml` dependencies.
+- [ ] Initialize virtual environment and configure `requirements.txt` dependencies.
 - [ ] Install FastAPI, Uvicorn, Pydantic, SQLAlchemy, asyncpg, Alembic, structlog, and ruff.
 - [ ] Scaffold the app package directory:
   - `app/main.py`: App initialization and lifecycles.

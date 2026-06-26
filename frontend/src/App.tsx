@@ -51,11 +51,11 @@ function HealthChecker() {
             }`}>{status}</span>
           </div>
         </div>
-        {details && (
+        {details ? (
           <pre className="bg-black/40 p-4 rounded-md text-xs font-mono border border-border overflow-x-auto text-green-300">
             {JSON.stringify(details, null, 2)}
           </pre>
-        )}
+        ) : null}
       </CardContent>
     </Card>
   );

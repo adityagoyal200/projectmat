@@ -708,7 +708,7 @@ Migrate to a dedicated PostgreSQL instance (Railway-managed or AWS RDS) if Supab
 
 | Tool                        | Purpose                                                                      |
 | --------------------------- | ---------------------------------------------------------------------------- |
-| **Poetry**                  | Python dependency management and virtual environments                        |
+| **pip & venv**              | Python dependency management and virtual environments                        |
 | **npm**                     | Node.js package manager for the frontend                                     |
 | **Vite**                    | Frontend build tool and dev server (`vite.config.ts`)                        |
 | **React Router v6**         | Client-side routing for the SPA                                              |

@@ -21,7 +21,7 @@ projectmatchai/
 ### Prerequisites
 
 - **Docker Desktop**
-- **Python 3.11+** and **Poetry**
+- **Python 3.11+**
 - **Node.js 18+** and **npm**
 
 ---
@@ -60,17 +60,25 @@ Update any required API keys or port settings in the newly created `.env` file.
    ```bash
    cd backend
    ```
-2. Install virtual environment and packages using Poetry:
+2. Activate your virtual environment and install packages:
+
    ```bash
-   poetry install
+   # On Windows (PowerShell):
+   .\.venv\Scripts\activate
+   # On macOS/Linux:
+   source .venv/bin/activate
+
+   # Install dependencies:
+   pip install -r requirements-dev.txt
    ```
+
 3. Run migrations (applied in Phase 1):
    ```bash
-   poetry run alembic upgrade head
+   alembic upgrade head
    ```
 4. Start the FastAPI development server:
    ```bash
-   poetry run uvicorn app.main:app --reload --port 8000
+   uvicorn app.main:app --reload --port 8000
    ```
    _The API docs will be available at [http://localhost:8000/docs](http://localhost:8000/docs)._
 
@@ -120,7 +128,7 @@ To enforce linting, formatting, and type-checks before commits:
 Execute pytest suite inside the `/backend` directory:
 
 ```bash
-poetry run pytest
+pytest
 ```
 
 ### Frontend Tests

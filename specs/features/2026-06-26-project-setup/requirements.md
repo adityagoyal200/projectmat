@@ -36,7 +36,7 @@ Before any functional features (like authentication, profile parsing, or project
 ### In Scope
 
 - **Repository and Tooling**: Monorepo layout (`/frontend`, `/backend`, `/specs`), `.gitignore`, `.env.example`, README setup instructions.
-- **Backend Infrastructure**: Uvicorn + FastAPI scaffolding, Poetry for dependency management, Pydantic `Settings`, Structlog logging (JSON in production, colorized in dev), custom exception handlers.
+- **Backend Infrastructure**: Uvicorn + FastAPI scaffolding, pip requirements.txt dependency management, Pydantic `Settings`, Structlog logging (JSON in production, colorized in dev), custom exception handlers.
 - **Database Engine Connectivity**: SQLAlchemy 2.0 async engine via `asyncpg` connecting to Docker PostgreSQL. Alembic initialized.
 - **Health Check Endpoint**: `GET /api/health` checking database query performance and status.
 - **Frontend Infrastructure**: Vite + React 18 (TypeScript), Tailwind CSS v3, React Router v6, shadcn/ui base installation with `Button`, `Input`, `Card`.
@@ -87,7 +87,7 @@ The following endpoint is introduced in this phase to verify workspace integrati
 
 ### Package Management
 
-- Backend uses **Poetry** for isolated Python dependency tracking and virtual environment control.
+- Backend uses **pip** for dependency tracking and standard virtual environments (`venv`).
 - Frontend uses **npm** as the Node package manager (consistent with team conventions).
 
 ### Databases & Extensions
@@ -105,7 +105,7 @@ The following endpoint is introduced in this phase to verify workspace integrati
 ## 7. Dependencies
 
 - **Docker Desktop** installed on development systems.
-- **Python 3.11+** and **Poetry** configured on system path.
+- **Python 3.11+** configured on system path.
 - **Node.js 18+** and **npm** installed.
 
 ---
@@ -127,7 +127,7 @@ The following endpoint is introduced in this phase to verify workspace integrati
 
 ## 10. Definition of Done
 
-- [ ] Backend runs via Poetry without error, connected to Docker PostgreSQL.
+- [ ] Backend runs via standard virtual environment without error, connected to Docker PostgreSQL.
 - [ ] Frontend compiles with no TypeScript or ESLint errors.
 - [ ] Pre-commit hooks (Ruff, ESLint, Prettier, Pyright) succeed on files.
 - [ ] `GET /api/health` returns status `"ok"` and validates DB connection.

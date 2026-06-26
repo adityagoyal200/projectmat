@@ -98,7 +98,7 @@ Establish a fully functional, runnable project skeleton with all tooling configu
 **Backend**
 
 - FastAPI application scaffolded: `app/main.py`, `app/config.py`, `app/database.py`, `app/dependencies.py`
-- Poetry dependency management with `pyproject.toml`
+- Pip dependency management with `requirements.txt` and `requirements-dev.txt`
 - Pydantic `Settings` class wired to `.env` via `pydantic-settings`
 - SQLAlchemy 2.0 async engine + `asyncpg` driver
 - Alembic initialised (`alembic init alembic/`)

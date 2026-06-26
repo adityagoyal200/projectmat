@@ -110,7 +110,7 @@
 
 1. Start all docker compose containers: `docker compose up -d`
 2. Run database health ping from bash: `docker exec -it projectmatchai-db pg_isready`
-3. Launch backend application: `poetry run uvicorn app.main:app --reload`
+3. Launch backend application: `uvicorn app.main:app --reload`
 4. Query the health check endpoint using curl:
    ```bash
    curl -i http://localhost:8000/api/health
