@@ -1,224 +1,221 @@
-# ProjectMatchAI — Mission
+# ProjectMatchAI - Mission
 
-> **Constitution Document · Version 1.0 · June 2026**
-> This document is a living source of truth. Update it deliberately and with team consensus.
+> Constitution Document - Version 2.0 - June 2026
+> This document defines what ProjectMatchAI is building and why. It is a living source of truth and must be updated deliberately when product scope changes.
 
 ---
 
 ## 1. Project Vision
 
-ProjectMatchAI is an AI-powered platform that connects students with mentors and real-world projects — not based solely on what a student already knows, but on who they have the potential to become.
+ProjectMatchAI is an AI-powered standalone upload-and-review app for internship, mentorship, research, and project-based learning programs.
 
-We believe the right project at the right time, guided by the right mentor, is one of the most accelerating forces in a person's technical career. Our platform exists to make that match — intelligently, transparently, and at scale — for learners across both academic institutions and professional upskilling environments.
+It receives structured and semi-structured data from operator uploads: student/candidate spreadsheets, resume files, mentor records, project descriptions, prerequisites, preferences, and historical selection signals. It normalizes that data, enriches candidate and project profiles, runs explainable AI matching, and shows or exports ranked recommendations for human review.
+
+The backend remains API-first so ProjectMatchAI can later become part of a larger system without rewriting the core import and matching pipeline.
 
 ---
 
 ## 2. Problem Statement
 
-### For Students
+### For Program Operators
 
-Students struggle to find meaningful projects that match their current skills while also stretching them toward new ones. Most matching systems are keyword-based and filter out candidates who lack exact-match experience — even if those candidates are highly capable of learning those skills within the project timeline.
+Program teams often manage candidate lists, resume folders, mentor details, project descriptions, preferences, and final selections across disconnected spreadsheets. Matching students to projects becomes slow, subjective, and hard to audit. Small inconsistencies, missing fields, and ambiguous prerequisites make manual review even more fragile.
 
 ### For Mentors
 
-Mentors waste significant time reviewing unqualified candidates and lack structured tools to assess a student's growth potential beyond a list of technologies on a resume. There is no standardised feedback loop that makes the next match better than the last.
+Mentors need candidates who fit both the project requirements and the learning context. Manually reading every resume and spreadsheet row is time-consuming, and simple keyword filters miss candidates with strong adjacent skills or fast learning potential.
 
-### For the Industry
+### For Students and Candidates
 
-There is a systemic gap between what universities and bootcamps teach and what real-world projects require. This gap is often not a matter of intelligence or effort — it is a matter of targeted, project-based exposure that students rarely get.
+Students are often evaluated on visible keywords rather than growth potential, project fit, or evidence spread across resumes and program records. They benefit when recommendations are explainable and when final decisions remain human-reviewed.
+
+### For Future Integrations
+
+The same backend should later support an upstream platform that submits candidate/project data and consumes match results. That integration is not required for the MVP.
 
 ---
 
 ## 3. Goals
 
-| #   | Goal                                                                                                                 |
-| --- | -------------------------------------------------------------------------------------------------------------------- |
-| G1  | Match students to projects based on **growth potential**, not just current skills                                    |
-| G2  | Provide **explainable AI recommendations** — mentors always understand _why_ a candidate was ranked                  |
-| G3  | Give students an **actionable learning roadmap** bridging the gap between their current profile and a target project |
-| G4  | Enable mentors to make **faster, more confident decisions** through structured AI assistance                         |
-| G5  | Collect and incorporate **mentor feedback** to continuously improve future recommendations                           |
-| G6  | Generate career-supporting artefacts: **ATS reports** and **industry readiness reports** for students                |
-| G7  | Support both **academic and professional** settings equally from day one                                             |
-| G8  | Provide a **real-time collaboration channel** (chat) between matched students and mentors                            |
+| #   | Goal                                                                                                                                 |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| G1  | Import candidate/student data from spreadsheets and optional resume files or file references.                                        |
+| G2  | Import mentor and project data from spreadsheets or future API payloads.                                                             |
+| G3  | Normalize messy source data into canonical candidates, mentors, projects, skills, technologies, and prerequisites.                   |
+| G4  | Match candidates to projects based on skills, semantic alignment, prerequisites, preferences, resume evidence, and growth potential. |
+| G5  | Provide explainable AI recommendations with score breakdowns and source-grounded rationale.                                          |
+| G6  | Produce auditable match-run outputs that can be reviewed by humans or consumed by an upstream system.                                |
+| G7  | Keep AI providers, embedding models, OCR engines, and parsers replaceable.                                                           |
+| G8  | Preserve privacy and consent boundaries for resumes, personal data, and generated embeddings.                                        |
 
 ---
 
 ## 4. Non-Goals
 
-| #   | Non-Goal                                                                                                 |
-| --- | -------------------------------------------------------------------------------------------------------- |
-| NG1 | We are **not** a job board or a freelance marketplace                                                    |
-| NG2 | We are **not** an automated hiring system — the AI never makes the final decision                        |
-| NG3 | We are **not** a learning management system (LMS) — we point students toward resources, not deliver them |
-| NG4 | We are **not** a social network — profiles are functional, not performative                              |
-| NG5 | We will **not** replace mentor judgment with algorithmic enforcement                                     |
-| NG6 | We will **not** store or train on private student data without explicit consent                          |
+| #   | Non-Goal                                                                                                              |
+| --- | --------------------------------------------------------------------------------------------------------------------- |
+| NG1 | ProjectMatchAI is not the system of record for enrollment, official acceptance, or program operations.                |
+| NG2 | ProjectMatchAI does not make final allocation decisions automatically. Humans approve final matches.                  |
+| NG3 | ProjectMatchAI is not a job board, freelance marketplace, LMS, or social network.                                     |
+| NG4 | MVP does not require student registration, mentor accounts, chat, notifications, or admin moderation.                 |
+| NG5 | MVP does not require a distributed task queue, multi-tenant architecture, or dedicated vector database.               |
+| NG6 | The system will not store or train on private candidate data without explicit consent and documented retention rules. |
 
 ---
 
 ## 5. Target Users
 
-### Students
+### Program Operators
 
-- University and college students (any stage, any discipline)
-- Bootcamp graduates and self-taught developers seeking real-world experience
-- Professionals looking to pivot or upskill through project-based learning
-- Primary motivation: gaining experience, building a portfolio, learning under guidance
+- Upload or send cohort spreadsheets, mentor/project spreadsheets, and resume bundles.
+- Review validation errors and warnings.
+- Trigger match runs and export ranked recommendations.
 
-### Mentors
+### Mentors and Reviewers
 
-- Faculty members and professors assigning capstone or research projects
-- Industry professionals volunteering or paid to guide learners
-- Engineering leads seeking to assess early-career talent through project trials
-- Primary motivation: finding capable, motivated, growth-oriented contributors
+- Review ranked candidates for their projects.
+- Read score breakdowns and explanations.
+- Make final selections outside or inside the larger platform, depending on integration phase.
 
-### Admins
+### Students and Candidates
 
-- Platform operators responsible for user management, content moderation, and system health
+- Provide resumes and profile data through the larger system.
+- Benefit from fairer matching and, in later phases, receive learning gap feedback.
 
----
+### Future Integration Consumers
 
-## 6. Core Principles
-
-### P1 — Humans Decide, AI Assists
-
-The AI system produces ranked candidates with explanations. The mentor always makes the final acceptance decision. No automated matching without human review.
-
-### P2 — Explainability Is Non-Negotiable
-
-Every AI recommendation must be accompanied by a plain-language explanation. "Why was this student recommended?" must always have a clear, human-readable answer. Black-box scoring is unacceptable.
-
-### P3 — Growth Over Credential
-
-A student who can learn Python in three weeks for a project is more valuable than a student who listed Python on their resume two years ago and never used it since. The system is designed to surface potential, not just credentials.
-
-### P4 — Feedback Closes the Loop
-
-Mentor decisions and post-project feedback are first-class data. Every accept, reject, and project outcome is a signal that improves future recommendations. The system gets smarter with use.
-
-### P5 — Privacy and Consent First
-
-Student profiles, resumes, and embeddings are personal data. The system must be transparent about what is stored, how it is used, and how it can be deleted.
-
-### P6 — Accessibility by Default
-
-The platform must be usable by students and mentors regardless of their institution's resources, technical setup, or geography.
+- Upstream product services that may later send candidate/project data to ProjectMatchAI.
+- Downstream review or allocation workflows that may later consume match-run results.
 
 ---
 
-## 7. Guiding Engineering Principles
+## 6. Core Product Principles
 
-### E1 — Clean Architecture
+### P1 - Humans Decide, AI Assists
 
-Separate concerns strictly: API layer, service layer, repository layer. No business logic in route handlers. No database queries in service code that belongs in repositories.
+The AI system produces ranked recommendations, warnings, and explanations. It never performs final project allocation without human approval.
 
-### E2 — Feature-Based Structure
+### P2 - Explainability Is Non-Negotiable
 
-Both frontend and backend codebases are organised by feature/domain (e.g., `auth/`, `profile/`, `matching/`), not by technical layer. This enables AI-assisted development by making context local and self-contained.
+Every recommendation must include a plain-language explanation and a score breakdown. Black-box ranking is unacceptable.
 
-### E3 — Modular AI Services
+### P3 - Growth Over Credential
 
-Each AI capability (embedding, reranking, LLM explanation, OCR, parsing) is encapsulated behind a well-defined service interface. AI providers can be swapped or upgraded without touching business logic.
+The system should surface candidates who can plausibly grow into a project, not only candidates who already list exact keywords.
 
-### E4 — Configuration Over Code
+### P4 - Source-Grounded Matching
 
-All environment-specific values (API keys, model names, feature flags) live in environment variables. No hardcoded secrets or environment assumptions in source code.
+Recommendations must be grounded in imported records, resume evidence, project prerequisites, and documented scoring signals. The system must distinguish known facts from AI inference.
 
-### E5 — Test at Every Phase
+### P5 - Validation Before Matching
 
-Unit and integration tests are written as part of each phase's Definition of Done. A dedicated E2E/QA phase validates the integrated system before deployment.
+Messy import data is expected. The system must validate and report missing fields, duplicate candidates, unknown resume files, ambiguous mentors, empty prerequisites, and malformed contact data before matching.
 
-### E6 — Incremental and Reviewable
+### P6 - Privacy and Consent First
 
-Development proceeds in small, independently completable phases. Each phase produces a working, reviewable artefact. No phase depends on a subsequent phase being started.
+Candidate profiles, resumes, embeddings, and generated explanations are personal data. Retention, deletion, and auditability are first-class requirements.
 
-### E7 — Observable Systems
+---
 
-Structured logging and error tracing are implemented from Phase 0. Every failure must be diagnosable from logs without attaching a debugger.
+## 7. Engineering Principles
 
-### E8 — Designed for AI-Assisted Development
+### E1 - Clean Architecture
 
-Documentation, naming conventions, and code structure are written so that an AI coding agent can understand any module without needing context outside that module's directory.
+Separate API, service, repository, parser, AI, and export concerns. No business logic in route handlers. No database access outside repositories.
+
+### E2 - Feature-Based Structure
+
+Organize backend and frontend code by domain: imports, candidates, mentors, projects, matching, exports, evaluation, and review.
+
+### E3 - Modular AI Services
+
+Embedding, reranking, generation, resume parsing, OCR, and extraction are replaceable services behind explicit interfaces.
+
+### E4 - Integration Contracts
+
+Every inbound file/API contract and outbound result contract is documented and versioned.
+
+### E5 - Test at Every Phase
+
+Unit, integration, and fixture-based validation tests are required for every phase.
+
+### E6 - Incremental and Reviewable
+
+Each phase must produce a working artifact that can be reviewed independently.
+
+### E7 - Observable Systems
+
+Import failures, parsing errors, model failures, match-run status, latency, and fallback behavior must be logged with structured context.
 
 ---
 
 ## 8. AI Principles
 
-### AI1 — Abstract Provider Interface
+### AI1 - Abstract Provider Interfaces
 
-All LLM calls route through an abstract provider interface. Ollama (Qwen) and OpenAI are both supported and configured via environment variables. No model-specific logic leaks into business code.
+All model calls route through provider interfaces selected by configuration.
 
-### AI2 — Semantic Search First
+### AI2 - Structured Ingestion First
 
-Candidate retrieval uses pgvector semantic similarity search over dense embeddings (BAAI BGE). This captures conceptual alignment, not just keyword overlap.
+Spreadsheet and resume inputs are converted into typed canonical schemas before embedding, scoring, or generation.
 
-### AI3 — Reranking for Precision
+### AI3 - Semantic Search plus Reranking
 
-The initial semantic retrieval pool is reranked by a BGE Cross Encoder that scores each candidate against the full project description. Reranking improves precision beyond what embedding similarity alone can achieve.
+Candidate-project retrieval uses embeddings for broad recall and reranking for precision.
 
-### AI4 — Hybrid Scoring
+### AI4 - Hybrid Scoring
 
-Final candidate ranking combines semantic similarity, cross-encoder score, skill gap analysis, learning velocity estimation, and historical mentor feedback into a single transparent composite score.
+Final ranking combines semantic similarity, reranker relevance, skill/prerequisite overlap, resume evidence, preference signals, and later mentor feedback.
 
-### AI5 — LLM Explanations Are Grounded
+### AI5 - Grounded Explanations
 
-LLM-generated match explanations are strictly grounded in the student's structured profile and the project's requirements. Hallucination is mitigated by providing structured context, not free-form prompting.
+LLM explanations must be generated from structured candidate/project context and score components. If the LLM fails, deterministic fallback explanations must still be returned.
 
-### AI6 — Resume Parsing Is Structured
+### AI6 - Versioned Match Runs
 
-PyMuPDF handles digital PDFs. PaddleOCR handles scanned documents. Parsed data is converted into a structured schema before embedding or display. Raw OCR output is never stored as the canonical profile.
+Every match run records data import version, schema version, scoring version, model versions, and configuration used to generate results.
 
-### AI7 — Embeddings Are Versioned
+### AI7 - Embeddings Are Versioned
 
-Every embedding in the vector store records which model version and schema version produced it. If the embedding model changes, affected records are flagged for re-embedding.
+Every embedding records model name, model version, schema version, source record version, and generated timestamp.
 
 ---
 
-## 9. Definition of Success
+## 9. MVP Success Criteria
 
-### MVP Success Criteria
-
-| Criterion                                                                        | Target      |
-| -------------------------------------------------------------------------------- | ----------- |
-| A student can register, upload a resume, and have a structured profile generated | ✓ Working   |
-| A mentor can create a project and receive a ranked list of student candidates    | ✓ Working   |
-| Every candidate ranking includes a plain-language AI explanation                 | ✓ Present   |
-| A matched student and mentor can communicate via real-time chat                  | ✓ Working   |
-| Mentor feedback is captured and stored for future model improvement              | ✓ Stored    |
-| Admin can manage users and moderate projects                                     | ✓ Working   |
-| The platform functions for both academic and professional users                  | ✓ Validated |
-
-### Long-Term Success Indicators
-
-- Mentors report higher confidence in candidate selection compared to manual review
-- Students report that recommended projects led to measurable skill growth
-- Feedback loop demonstrably improves recommendation quality over cohort iterations
-- Platform operates across at least two distinct institution types (university + industry program)
+| Criterion                                                                                      | Target    |
+| ---------------------------------------------------------------------------------------------- | --------- |
+| A program operator can import a workbook with students, mentors, and projects.                 | Working   |
+| The system validates missing and inconsistent input data before matching.                      | Working   |
+| Resume file references can be linked to candidate records and parsed when files are available. | Working   |
+| Projects and prerequisites are normalized into canonical records.                              | Working   |
+| A match run generates ranked candidates per project with component scores.                     | Working   |
+| Each recommendation includes a source-grounded explanation.                                    | Present   |
+| Results can be exported for human review or returned via API.                                  | Working   |
+| AI providers and model choices remain replaceable.                                             | Validated |
 
 ---
 
 ## 10. Future Vision
 
-**Near Term (Post-MVP)**
+Near term:
 
-- Skill gap learning roadmaps linked to curated external resources (YouTube, documentation, courses)
-- Industry readiness scoring benchmarked against real job descriptions
-- ATS report generation tailored to specific roles or companies
+- API-first integration with a larger platform.
+- Reviewer UI for validation issues and match-run review.
+- Export back to spreadsheet formats used by program teams.
 
-**Medium Term**
+Medium term:
 
-- Longitudinal student profiles that track skill development across multiple projects
-- Mentor reputation and matching quality scores based on student outcomes
-- Cohort-level analytics for institutions: which skills are most in demand, which gaps are most common
+- Mentor feedback loops and AI evaluation datasets.
+- Student-facing skill-gap reports and learning recommendations.
+- Cohort analytics for program operators.
 
-**Long Term**
+Long term:
 
-- Multi-institution federated deployments with privacy-preserving profile sharing
-- Fine-tuned domain-specific embedding models trained on platform feedback data
-- Autonomous learning path generation: given a target role, generate the sequence of projects a student should pursue
-- Open API for third-party institutions to integrate ProjectMatchAI recommendations into their own portals
+- Multi-institution deployments with privacy-preserving data boundaries.
+- Continuous quality evaluation of matching outcomes.
+- Open integration API for third-party program management systems.
 
 ---
 
-_This document was authored as part of the ProjectMatchAI project constitution and should be reviewed and updated at each major version milestone._
+_This document should be reviewed when ProjectMatchAI becomes the source of truth for additional workflows or when external integration becomes part of the active roadmap._

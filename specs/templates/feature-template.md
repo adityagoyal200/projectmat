@@ -1,12 +1,12 @@
 # Feature Specification Template
 
-> **Usage**: Copy this file to `specs/features/<feature-name>.md` and complete all sections before writing any code. An incomplete spec is a blocker — do not start implementation until all required sections are filled.
+> Usage: Copy this file to `specs/features/<YYYY-MM-DD-feature-name>/requirements.md` and complete all sections before writing production code. An incomplete spec is a blocker.
 
 ---
 
 ## Feature Name
 
-<!-- One-line title -->
+<!-- One-line title. -->
 
 ## Status
 
@@ -14,7 +14,7 @@
 
 ## Author
 
-<!-- Your name or team name -->
+<!-- Author or team name. -->
 
 ## Date
 
@@ -22,79 +22,159 @@
 
 ## Related Phase
 
-<!-- e.g. Phase 7 — Student Profile -->
+<!-- e.g. Phase 2 - Bulk Workbook Import -->
+
+## Related ADRs
+
+<!-- Link ADRs if this feature depends on or changes architecture. -->
 
 ---
 
 ## 1. Problem Statement
 
 <!--
-What problem does this feature solve?
-Who experiences this problem?
+What problem exists?
+Who experiences it?
+Why is it important?
 What is the impact of not solving it?
-Keep this to 3–5 sentences.
+Keep this to 3-5 sentences.
 -->
+
+---
 
 ## 2. Proposed Solution
 
 <!--
 At a high level, what will this feature do?
-Avoid implementation details here — focus on behaviour visible to the user or API consumer.
+Avoid implementation details here. Focus on behavior visible to users, operators, or API consumers.
 -->
+
+---
 
 ## 3. User Stories
 
+<!-- Format: As a <role>, I want to <action>, so that <outcome>. -->
+
+- As a **[role]**, I want to **[action]**, so that **[outcome]**.
+- As a **[role]**, I want to **[action]**, so that **[outcome]**.
+
+---
+
+## 4. Input and Output Contracts
+
 <!--
-Format: As a <role>, I want to <action>, so that <outcome>.
-Include one story per distinct user interaction.
+For subsystem features, describe inbound data and outbound results.
+For UI-only features, describe screen/state contracts instead.
 -->
 
-- As a **[role]**, I want to **[action]**, so that **[outcome]**.
-- As a **[role]**, I want to **[action]**, so that **[outcome]**.
+### Inputs
 
-## 4. Scope
+| Input | Required | Contract |
+| ----- | -------- | -------- |
+|       |          |          |
+
+### Outputs
+
+| Output | Consumer | Contract |
+| ------ | -------- | -------- |
+|        |          |          |
+
+---
+
+## 5. Scope
 
 ### In Scope
 
 -
 -
 
-### Out of Scope (Explicitly Deferred)
+### Out of Scope
 
-<!--
-List things that might seem related but are NOT part of this feature.
-This prevents scope creep during implementation.
--->
+<!-- List related work that is explicitly deferred. -->
 
 -
 - ***
 
-## 5. API Design
+## 6. Solution Options and Trade-offs
 
-<!--
-List all new or modified endpoints.
-Use the format: METHOD /api/path — Brief description
-For full endpoint spec, create a corresponding api-template.md.
--->
+### Option 1: MVP Approach
 
-| Method | Path       | Description | Auth Required | Role    |
-| ------ | ---------- | ----------- | ------------- | ------- |
-| `GET`  | `/api/...` |             | ✅            | student |
-| `POST` | `/api/...` |             | ✅            | mentor  |
+Description:
+
+| Dimension            | Assessment |
+| -------------------- | ---------- |
+| Complexity           |            |
+| Development effort   |            |
+| Maintainability      |            |
+| Scalability          |            |
+| Performance          |            |
+| Cost                 |            |
+| Future extensibility |            |
+
+### Option 2: Recommended Production Approach
+
+Description:
+
+| Dimension            | Assessment |
+| -------------------- | ---------- |
+| Complexity           |            |
+| Development effort   |            |
+| Maintainability      |            |
+| Scalability          |            |
+| Performance          |            |
+| Cost                 |            |
+| Future extensibility |            |
+
+### Option 3: Enterprise Approach
+
+Description:
+
+| Dimension            | Assessment |
+| -------------------- | ---------- |
+| Complexity           |            |
+| Development effort   |            |
+| Maintainability      |            |
+| Scalability          |            |
+| Performance          |            |
+| Cost                 |            |
+| Future extensibility |            |
+
+### Recommendation
+
+<!-- Recommend exactly one approach and explain why the others are rejected. -->
 
 ---
 
-## 6. Data Model Changes
+## 7. Industry Practice
+
+<!-- Briefly compare how startups, mid-sized SaaS companies, and large technology companies solve this problem. -->
+
+---
+
+## 8. API Design
 
 <!--
-List any new tables, columns, or indexes required.
-If adding a new table, include the key columns.
-No JSON for structured data — use proper columns and foreign keys.
+List all new or modified endpoints.
+For full endpoint details, create a corresponding API spec.
+-->
+
+| Method | Path       | Description | Auth Required | Caller/Role   |
+| ------ | ---------- | ----------- | ------------- | ------------- |
+| `GET`  | `/api/...` |             | Yes           | `operator`    |
+| `POST` | `/api/...` |             | Yes           | `integration` |
+
+---
+
+## 9. Data Model Changes
+
+<!--
+List new tables, modified tables, indexes, and migrations.
+No business-critical structured data should live only in JSON.
 -->
 
 ### New Tables
 
-```
+```text
 table_name
   column_name: type (constraints)
   column_name: type (constraints)
@@ -109,17 +189,13 @@ table_name
 
 ### Migrations
 
-- [ ] Alembic migration file created: `alembic/versions/XXXX_<description>.py`
-- [ ] `alembic upgrade head` verified on a fresh database
-- [ ] `alembic downgrade base` verified
+- [ ] Alembic migration file created.
+- [ ] `alembic upgrade head` verified on a fresh database.
+- [ ] `alembic downgrade base` verified.
 
 ---
 
-## 7. Service Design
-
-<!--
-Briefly describe the service layer. What classes and methods are introduced?
--->
+## 10. Service Design
 
 ```python
 class FeatureService:
@@ -130,32 +206,29 @@ class FeatureService:
 
 ---
 
-## 8. AI / Generation Components
-
-<!--
-If this feature uses the LLM or embedding pipeline, describe:
-- Which generation module is used (ai/generation/explanation.py, roadmap.py, etc.)
-- What prompt template is used (prompts/<name>.txt)
-- What the fallback behaviour is if the AI call fails
--->
+## 11. AI / Generation Components
 
 | Component | Module | Prompt Template | Fallback |
 | --------- | ------ | --------------- | -------- |
 |           |        |                 |          |
 
+Rules:
+
+- No direct LLM calls outside `ai/generation/`.
+- AI provider failures must have tested fallback behavior.
+- Generated text must be grounded in structured context.
+
 ---
 
-## 9. Frontend Components
+## 12. Frontend Components
 
-<!--
-List new pages, components, and hooks required.
--->
+<!-- If no frontend is required, say so explicitly. -->
 
 ### New Pages
 
-| Route          | File                    | Description |
-| -------------- | ----------------------- | ----------- |
-| `/student/...` | `src/pages/student/...` |             |
+| Route  | File            | Description |
+| ------ | --------------- | ----------- |
+| `/...` | `src/pages/...` |             |
 
 ### New Components
 
@@ -171,45 +244,36 @@ List new pages, components, and hooks required.
 
 ---
 
-## 10. Validation & Test Plan
+## 13. Validation and Test Plan
 
-<!--
-What tests will be written? Use the validation-template.md for the full checklist.
--->
+<!-- Link `validation.md` or fill a compact summary here. -->
 
-| Test Type   | What Is Tested                        | Expected Outcome                |
-| ----------- | ------------------------------------- | ------------------------------- |
-| Unit        | `service.method()` with valid input   | Returns correct result          |
-| Unit        | `service.method()` with invalid input | Raises `ValueError`             |
-| Integration | `POST /api/...`                       | Returns 200 with correct schema |
-| Integration | `POST /api/...` without auth          | Returns 401                     |
+| Test Type   | What Is Tested                        | Expected Outcome                    |
+| ----------- | ------------------------------------- | ----------------------------------- |
+| Unit        | `service.method()` with valid input   | Returns correct result.             |
+| Unit        | `service.method()` with invalid input | Raises expected error.              |
+| Integration | `POST /api/...`                       | Returns expected status and schema. |
 
 ---
 
-## 11. Definition of Done
+## 14. Definition of Done
 
-<!--
-This section is the contract. The feature is not done until every item is checked.
--->
-
-- [ ] All listed endpoints return correct status codes and response schemas
-- [ ] All listed service methods have unit tests
-- [ ] All listed endpoints have integration tests
-- [ ] TypeScript strict mode passes (`tsc --noEmit`)
-- [ ] Ruff and ESLint pass with zero warnings
-- [ ] Alembic migration applies and rolls back cleanly
-- [ ] API documentation updated (FastAPI auto-docs verified)
-- [ ] `README.md` updated if new environment variables were added to `.env.example`
-- [ ] No `any` types in new TypeScript code
-- [ ] No raw SQL in service layer
+- [ ] Architecture approved.
+- [ ] All listed endpoints return correct status codes and response schemas.
+- [ ] All listed service methods have unit tests.
+- [ ] All listed endpoints have integration tests.
+- [ ] AI fallback behavior is tested where relevant.
+- [ ] Alembic migration applies and rolls back cleanly where relevant.
+- [ ] FastAPI OpenAPI docs verified.
+- [ ] README and `.env.example` updated if new setup or env vars were added.
+- [ ] Ruff and ESLint pass with zero warnings where relevant.
+- [ ] No `any` types in new TypeScript code.
+- [ ] No raw SQL in service or router layers.
+- [ ] No direct LLM calls outside `ai/generation/`.
 
 ---
 
-## 12. Open Questions
-
-<!--
-List any unresolved design decisions. Assign an owner and a resolution date.
--->
+## 15. Open Questions
 
 | Question | Owner | Resolution Date | Decision |
 | -------- | ----- | --------------- | -------- |
@@ -217,4 +281,4 @@ List any unresolved design decisions. Assign an owner and a resolution date.
 
 ---
 
-_Template version 1.0 — ProjectMatchAI_
+_Feature Template version 2.0 - ProjectMatchAI_

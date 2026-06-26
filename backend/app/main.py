@@ -47,7 +47,7 @@ log = structlog.get_logger()
 app = FastAPI(
     title="ProjectMatchAI API",
     version="0.1.0",
-    description="Backend API for ProjectMatchAI student-mentor platform",
+    description="Backend API for ProjectMatchAI bulk intake and matching",
 )
 
 # 3. CORS Configuration Middleware

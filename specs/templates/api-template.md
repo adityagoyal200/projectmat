@@ -1,26 +1,37 @@
 # API Endpoint Specification Template
 
-> **Usage**: Copy this file to `specs/apis/<feature-name>-api.md`. One file per feature domain (e.g., `auth-api.md`, `matching-api.md`). Fill in one section per endpoint. This document is the authoritative spec that the backend implementation and frontend integration must both match.
+> Usage: Copy this file to `specs/apis/<feature-name>-api.md` or to the relevant feature folder as `api.md`. One file per feature domain. This document is the authoritative API contract that backend implementation, frontend integration, and upstream systems must match.
 
 ---
 
 ## [Feature Name] API
 
 **Base path**: `/api/[feature]`
-**Authentication**: All endpoints require `Authorization: Bearer <access_token>` unless marked `Public`.
-**Content-Type**: `application/json` for all request/response bodies unless noted.
+**Authentication**: State the exact auth mode for this feature, for example `Public`, `Service API Key`, `Service JWT`, or `User JWT`.
+**Content-Type**: `application/json` for request/response bodies unless noted.
+
+---
+
+## Auth and Roles
+
+| Caller        | Auth Mode                          | Allowed Operations                                                        |
+| ------------- | ---------------------------------- | ------------------------------------------------------------------------- |
+| `integration` | Service API key or service JWT     | Submit imports and read machine-consumable results.                       |
+| `operator`    | User JWT or internal admin auth    | Upload files, review validation issues, start match runs, export results. |
+| `reviewer`    | User JWT or internal reviewer auth | Read match results and explanations.                                      |
+| `public`      | None                               | Health or public metadata only.                                           |
+
+Replace this table with the concrete roles for the feature being specified.
 
 ---
 
 ## Endpoints
 
----
-
 ### `[METHOD] [/api/path]`
 
 **Summary**: One-line description of what this endpoint does.
 
-**Auth**: ✅ Required — Role: `student` | `mentor` | `admin` | `public`
+**Auth**: Required or public. Role/caller: `integration` | `operator` | `reviewer` | `admin` | `public`
 
 ---
 
@@ -28,16 +39,16 @@
 
 **Path Parameters**
 
-| Parameter | Type   | Required | Description         |
-| --------- | ------ | -------- | ------------------- |
-| `id`      | `UUID` | ✅       | Resource identifier |
+| Parameter | Type   | Required | Description          |
+| --------- | ------ | -------- | -------------------- |
+| `id`      | `UUID` | Yes      | Resource identifier. |
 
 **Query Parameters**
 
-| Parameter   | Type  | Required | Default | Description              |
-| ----------- | ----- | -------- | ------- | ------------------------ |
-| `page`      | `int` | ❌       | `1`     | Pagination page number   |
-| `page_size` | `int` | ❌       | `20`    | Items per page (max 100) |
+| Parameter   | Type  | Required | Default | Description                                         |
+| ----------- | ----- | -------- | ------- | --------------------------------------------------- |
+| `page`      | `int` | No       | `1`     | Pagination page number.                             |
+| `page_size` | `int` | No       | `20`    | Items per page, max 100 unless otherwise specified. |
 
 **Request Body**
 
@@ -55,18 +66,18 @@
 class RequestSchema(BaseModel):
     field_name: str = Field(..., min_length=1, max_length=255, description="...")
     another_field: int = Field(..., ge=0, description="...")
-    optional_field: Optional[str] = Field(None, description="...")
+    optional_field: str | None = Field(None, description="...")
 ```
 
 ---
 
 #### Response
 
-**Success — `200 OK`** (or `201 Created` for POST)
+**Success - `200 OK`** or `201 Created` for creation endpoints.
 
 ```json
 {
-  "id": "uuid",
+  "id": "550e8400-e29b-41d4-a716-446655440000",
   "field_name": "string",
   "created_at": "2026-06-26T12:00:00Z"
 }
@@ -85,36 +96,44 @@ class ResponseSchema(BaseModel):
 
 #### Error Responses
 
-| Status Code                | Condition                         | Response Body                                                 |
-| -------------------------- | --------------------------------- | ------------------------------------------------------------- |
-| `400 Bad Request`          | Request body fails validation     | `{ "detail": [{"loc": [...], "msg": "...", "type": "..."}] }` |
-| `401 Unauthorized`         | Missing or invalid access token   | `{ "detail": "Not authenticated" }`                           |
-| `403 Forbidden`            | Valid token but insufficient role | `{ "detail": "Insufficient permissions" }`                    |
-| `404 Not Found`            | Resource does not exist           | `{ "detail": "Resource not found" }`                          |
-| `422 Unprocessable Entity` | Pydantic validation failure       | `{ "detail": [...] }`                                         |
-| `429 Too Many Requests`    | Rate limit exceeded               | `{ "detail": "Rate limit exceeded" }`                         |
+| Status Code                 | Condition                                                | Response Body                              |
+| --------------------------- | -------------------------------------------------------- | ------------------------------------------ |
+| `400 Bad Request`           | Request is syntactically valid but semantically invalid. | `{ "detail": "..." }`                      |
+| `401 Unauthorized`          | Missing or invalid authentication.                       | `{ "detail": "Not authenticated" }`        |
+| `403 Forbidden`             | Valid credentials but insufficient permissions.          | `{ "detail": "Insufficient permissions" }` |
+| `404 Not Found`             | Resource does not exist or caller cannot access it.      | `{ "detail": "Resource not found" }`       |
+| `409 Conflict`              | Idempotency or uniqueness conflict.                      | `{ "detail": "..." }`                      |
+| `413 Payload Too Large`     | File or payload exceeds configured limit.                | `{ "detail": "Payload too large" }`        |
+| `422 Unprocessable Entity`  | Pydantic validation failure.                             | `{ "detail": [...] }`                      |
+| `429 Too Many Requests`     | Rate limit exceeded.                                     | `{ "detail": "Rate limit exceeded" }`      |
+| `500 Internal Server Error` | Unexpected server error.                                 | `{ "detail": "Internal Server Error" }`    |
 
 ---
 
 #### Side Effects
 
-<!--
-List any side effects this endpoint has beyond returning data.
-Examples: sends an email, creates a notification, writes an audit log, triggers an async task.
--->
+List side effects beyond returning data:
 
-- Creates a `notifications` record of type `...` for user `...`
-- Writes an `audit_logs` record with action `...`
-- Triggers background task: `...`
+- Creates or updates database records.
+- Writes an `audit_logs` record.
+- Starts an import, parsing, matching, export, or generation job.
+- Emits structured logs.
+- Calls an AI provider through the centralized service layer.
+
+---
+
+#### Idempotency
+
+State whether the endpoint is idempotent. For integration endpoints, specify any `Idempotency-Key` behavior.
 
 ---
 
 #### Rate Limiting
 
-| Scope    | Limit                |
-| -------- | -------------------- |
-| Per IP   | `10 requests/minute` |
-| Per User | `60 requests/minute` |
+| Scope      | Limit |
+| ---------- | ----- |
+| Per caller | TBD   |
+| Per IP     | TBD   |
 
 ---
 
@@ -124,7 +143,7 @@ Examples: sends an email, creates a notification, writes an audit log, triggers 
 
 ```bash
 curl -X POST https://api.projectmatchai.com/api/... \
-  -H "Authorization: Bearer eyJ..." \
+  -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{
     "field_name": "example value"
@@ -143,17 +162,13 @@ curl -X POST https://api.projectmatchai.com/api/... \
 
 ---
 
-<!-- Repeat the above block for each endpoint in the feature -->
-
----
-
 ## Pagination Contract
 
-All list endpoints follow a consistent pagination shape:
+All list endpoints should follow this shape unless the API spec explicitly says otherwise:
 
 ```json
 {
-  "items": [...],
+  "items": [],
   "total": 100,
   "page": 1,
   "page_size": 20,
@@ -165,15 +180,13 @@ All list endpoints follow a consistent pagination shape:
 
 ## Common Error Shape
 
-All error responses follow:
-
 ```json
 {
   "detail": "Human-readable error message"
 }
 ```
 
-For validation errors (422):
+For validation errors:
 
 ```json
 {
@@ -201,4 +214,4 @@ app.include_router(router, prefix="/api")
 
 ---
 
-_API Template version 1.0 — ProjectMatchAI_
+_API Template version 2.0 - ProjectMatchAI_

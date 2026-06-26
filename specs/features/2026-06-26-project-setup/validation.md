@@ -1,6 +1,6 @@
 # Validation & Test Plan: Project Setup
 
-**Phase**: Phase 0 — Project Setup
+**Phase**: Phase 0 - Project Setup
 **Related Feature Spec**: [specs/features/2026-06-26-project-setup/requirements.md](requirements.md)
 **Author**: Senior Software Engineer
 **Date**: 2026-06-26
@@ -36,9 +36,9 @@
 
 | #   | Test File                          | Endpoint                | Scenario                             | Auth | Expected Status | Expected Response                                              |
 | --- | ---------------------------------- | ----------------------- | ------------------------------------ | ---- | --------------- | -------------------------------------------------------------- |
-| I1  | `tests/integration/test_health.py` | `GET /api/health`       | Normal conditions (DB running)       | ❌   | `200`           | `{ "status": "ok", "database": "connected" }`                  |
-| I2  | `tests/integration/test_health.py` | `GET /api/health`       | Database service offline/unreachable | ❌   | `503`           | `{ "status": "error", "database": "disconnected" }`            |
-| I3  | `tests/integration/test_errors.py` | `GET /api/simulate-500` | Endpoint raises unexpected Exception | ❌   | `500`           | `{ "detail": "Internal Server Error" }` (trace details hidden) |
+| I1  | `tests/integration/test_health.py` | `GET /api/health`       | Normal conditions (DB running)       | No   | `200`           | `{ "status": "ok", "database": "connected" }`                  |
+| I2  | `tests/integration/test_health.py` | `GET /api/health`       | Database service offline/unreachable | No   | `503`           | `{ "status": "error", "database": "disconnected" }`            |
+| I3  | `tests/integration/test_errors.py` | `GET /api/simulate-500` | Endpoint raises unexpected Exception | No   | `500`           | `{ "detail": "Internal Server Error" }` (trace details hidden) |
 
 ---
 

@@ -1,6 +1,5 @@
-import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
+import axios, { AxiosError } from 'axios';
 
-// Create AXIOS instance configured for JSON requests
 const client = axios.create({
   baseURL: (import.meta.env.VITE_API_URL as string) || '/api',
   timeout: 10000,
@@ -9,19 +8,6 @@ const client = axios.create({
   },
 });
 
-// Request Interceptor: Attach authentication token if stored
-client.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => {
-    const token = localStorage.getItem('token');
-    if (token && config.headers) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error: unknown) => Promise.reject(error)
-);
-
-// Response Interceptor: centralized error format mapping
 client.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
@@ -34,7 +20,6 @@ client.interceptors.response.use(
         if (typeof responseData.detail === 'string') {
           message = responseData.detail;
         } else if (Array.isArray(responseData.detail)) {
-          // Format validation error arrays from Pydantic
           message = responseData.detail
             .map((err) => `${err.loc.slice(1).join('.')}: ${err.msg}`)
             .join(', ');

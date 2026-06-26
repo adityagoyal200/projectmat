@@ -1,7 +1,7 @@
 # Feature Specification: Project Setup
 
-> **Related Phase**: Phase 0 — Project Setup
-> **Status**: `[ ] Review` > **Author**: Senior Software Engineer
+> **Related Phase**: Phase 0 - Project Setup
+> **Status**: `[ ] Done` > **Author**: Senior Software Engineer
 > **Date**: 2026-06-26
 
 ---
@@ -47,8 +47,8 @@ Before any functional features (like authentication, profile parsing, or project
 ### Out of Scope (Explicitly Deferred)
 
 - **Database Schemas & Migrations**: Relational tables, model definitions, and SQLAlchemy schemas are deferred to Phase 1.
-- **Authentication Forms & Endpoints**: Token generation, OAuth callbacks, registration/login pages are deferred to Phase 2 & 3.
-- **AI Integrations & Generation Services**: Embedding, parsing, and LLM provider logic are deferred to Phase 9+.
+- **Authentication Forms & Endpoints**: Standalone student/mentor auth is deferred. MVP integration auth will be specified when the bulk intake API is implemented.
+- **AI Integrations & Generation Services**: Embedding, parsing, and LLM provider logic are deferred to the bulk intake and matching phases.
 
 ---
 
@@ -58,7 +58,7 @@ The following endpoint is introduced in this phase to verify workspace integrati
 
 | Method | Path          | Description                                            | Auth Required | Role      |
 | ------ | ------------- | ------------------------------------------------------ | ------------- | --------- |
-| `GET`  | `/api/health` | Checks backend system health and database connectivity | ❌            | Anonymous |
+| `GET`  | `/api/health` | Checks backend system health and database connectivity | No            | Anonymous |
 
 ### Expected Health Response
 
