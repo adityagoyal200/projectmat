@@ -39,8 +39,8 @@ Post-MVP C - Portal and Integration Features
 | Phase    | Name                              | Status      |
 | -------- | --------------------------------- | ----------- |
 | Phase 0  | Project Setup                     | Completed   |
-| Phase 1  | Data Model                        | Not Started |
-| Phase 2  | Bulk Workbook Import              | Not Started |
+| Phase 1  | Data Model                        | Completed   |
+| Phase 2  | Bulk Workbook Import              | Completed   |
 | Phase 3  | Resume File Intake                | Not Started |
 | Phase 4  | Candidate Profile Normalization   | Not Started |
 | Phase 5  | Mentor and Project Normalization  | Not Started |

@@ -9,9 +9,7 @@ class ImportBatch(Base):
     __tablename__ = "import_batches"
 
     id = Column(Integer, primary_key=True, index=True)
-    status = Column(
-        String(50), nullable=False, default="pending"
-    )  # e.g. pending, processing, completed, failed
+    status = Column(String(50), nullable=False, default="pending")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -51,6 +49,7 @@ class ImportValidationIssue(Base):
     )
     sheet_name = Column(String(255), nullable=True)
     row_number = Column(Integer, nullable=True)
+    column_name = Column(String(255), nullable=True)
     issue_type = Column(String(50), nullable=False)  # error, warning
     message = Column(String(1024), nullable=False)
     raw_data_snapshot = Column(JSON, nullable=True)  # allowed for row snapshots

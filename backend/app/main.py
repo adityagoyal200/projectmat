@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 
+import app.models
 from app.config import settings
 from app.dependencies import get_db
 
@@ -126,7 +127,12 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
     return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 
 
+from app.features.imports.router import router as imports_router
+
 # 6. API Routing and Health Check Endpoints
+app.include_router(imports_router)
+
+
 @app.get("/api/health")
 async def health_check(db: AsyncSession = Depends(get_db)) -> JSONResponse:
     try:

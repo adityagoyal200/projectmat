@@ -1,11 +1,12 @@
 from collections.abc import AsyncGenerator
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from httpx import AsyncClient
 
+import app.models  # type: ignore # noqa: F401
 from app.dependencies import get_db
-from app.main import app
+from app.main import app as fastapi_app
 
 
 @pytest.fixture
@@ -16,13 +17,20 @@ def anyio_backend():
 @pytest.fixture
 def mock_db():
     """Fixture providing an AsyncMock representing the database session."""
-    return AsyncMock()
+    db = AsyncMock()
+
+    def fake_add(instance):
+        if hasattr(instance, "id") and instance.id is None:
+            instance.id = 1
+
+    db.add = MagicMock(side_effect=fake_add)
+    return db
 
 
 @pytest.fixture
 async def client(mock_db) -> AsyncGenerator[AsyncClient, None]:
     """Fixture providing a test client with overridden database dependency."""
-    app.dependency_overrides[get_db] = lambda: mock_db
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    fastapi_app.dependency_overrides[get_db] = lambda: mock_db
+    async with AsyncClient(app=fastapi_app, base_url="http://test") as ac:
         yield ac
-    app.dependency_overrides.clear()
+    fastapi_app.dependency_overrides.clear()
