@@ -38,3 +38,5 @@ Thumbs.db
 db.sqlite3
 .agents/
 .ruff_cache/
+.xlsx/
+.xlsx
