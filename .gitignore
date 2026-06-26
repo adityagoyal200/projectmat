@@ -40,3 +40,6 @@ db.sqlite3
 .ruff_cache/
 .xlsx/
 .xlsx
+skills/
+skills
+.md
