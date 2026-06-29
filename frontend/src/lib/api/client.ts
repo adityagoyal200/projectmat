@@ -2,7 +2,7 @@ import axios, { AxiosError } from 'axios';
 
 const client = axios.create({
   baseURL: (import.meta.env.VITE_API_URL as string) || '/api',
-  timeout: 10000,
+  timeout: 600000,
   headers: {
     'Content-Type': 'application/json',
   },

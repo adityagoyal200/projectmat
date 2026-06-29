@@ -6,7 +6,7 @@ from app.features.shared.models import Skill
 
 
 def test_import_batch_relationships():
-    batch = ImportBatch(status="pending")
+    batch = ImportBatch(status="created")
     file = ImportFile(file_name="test.xlsx", file_type="workbook", batch=batch)
     issue = ImportValidationIssue(issue_type="error", message="bad row", batch=batch)
     candidate = Candidate(registration_number="123", name="John", import_batch=batch)
@@ -33,8 +33,6 @@ def test_project_relationships():
     skill = Skill(name="Machine Learning")
     prereq = ProjectPrerequisite(project=project, skill=skill, is_required="true")
 
-    # Preference can be tied to a candidate (e.g. by reg number)
-    candidate = Candidate(registration_number="123", name="John")
     pref = ProjectPreference(
         project=project, preference_type="student_selection", preference_value="123"
     )

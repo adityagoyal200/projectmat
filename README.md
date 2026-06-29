@@ -134,7 +134,7 @@ Start here before implementing any phase:
 - `specs/mission.md`
 - `specs/tech-stack.md`
 - `specs/roadmap.md`
-- `specs/adrs/ADR-0001-bulk-intake-matching-subsystem.md`
+- `specs/adrs/ADR-0001-standalone-bulk-intake-matching-mvp.md`
 - `specs/features/2026-06-26-bulk-intake-and-matching/requirements.md`
 - `specs/apis/bulk-intake-and-matching-api.md`
 

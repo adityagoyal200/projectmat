@@ -28,7 +28,7 @@ Build only what is required for the current roadmap phase.
 
 In practice:
 
-- Do not build standalone student, mentor, chat, admin, or notification experiences until the matching subsystem requires them.
+- Do not build student accounts, mentor accounts, chat, admin, or notification experiences until the upload-and-review workflow requires them.
 - Do not add multi-tenant, task-queue, or enterprise workflow infrastructure before the MVP match-run lifecycle proves it needs them.
 - Keep post-MVP ideas in the roadmap or backlog, not in speculative code paths.
 

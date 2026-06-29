@@ -1,7 +1,7 @@
 # Validation and Test Plan: Bulk Intake and Matching
 
 **Related Feature Spec**: `requirements.md`
-**Related ADR**: `specs/adrs/ADR-0001-bulk-intake-matching-subsystem.md`
+**Related ADR**: `specs/adrs/ADR-0001-standalone-bulk-intake-matching-mvp.md`
 **Date**: 2026-06-26
 
 ---

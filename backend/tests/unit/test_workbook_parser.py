@@ -5,8 +5,9 @@ FIXTURES_DIR = "tests/fixtures"
 
 
 def read_fixture(filename: str) -> bytes:
-    with open(f"{FIXTURES_DIR}/{filename}", "rb") as f:
-        return f.read()
+    from pathlib import Path
+
+    return Path(f"{FIXTURES_DIR}/{filename}").read_bytes()
 
 
 def test_parse_valid_workbook():
@@ -27,7 +28,6 @@ def test_parse_valid_workbook():
 
     # There should be NO error-level issues
     error_issues = [i for i in parsed.issues if i.severity == "error"]
-    print("Issues:", parsed.issues)
     assert len(error_issues) == 0
 
 
@@ -38,8 +38,14 @@ def test_parse_missing_sheet():
     # Missing "Students Info" and "Mentors-projects"
     error_issues = [i for i in parsed.issues if i.severity == "error"]
 
-    assert any("Missing sheet: 'Students Info'" in i.message for i in error_issues)
-    assert any("Missing sheet: 'Mentors-projects'" in i.message for i in error_issues)
+    assert any(
+        i.code == "sheet.required_missing" and "Students Info" in i.message
+        for i in error_issues
+    )
+    assert any(
+        i.code == "sheet.required_missing" and "Mentors-projects" in i.message
+        for i in error_issues
+    )
 
 
 def test_parse_bad_columns():
@@ -48,9 +54,9 @@ def test_parse_bad_columns():
 
     # Students Info missing Registration Number
     error_issues = [i for i in parsed.issues if i.severity == "error"]
-    print("Bad columns issues:", parsed.issues)
     assert any(
-        "missing required column: 'registration number'" in i.message.lower()
+        i.code == "sheet.required_column_missing"
+        and "registration number" in i.message.lower()
         for i in error_issues
     )
 
@@ -60,5 +66,45 @@ def test_parse_empty_sheet():
     parsed = parse_workbook(content)
 
     error_issues = [i for i in parsed.issues if i.severity == "error"]
-    print("Empty sheet issues:", parsed.issues)
-    assert any("is empty" in i.message for i in error_issues)
+    assert any(i.code == "sheet.empty" for i in error_issues)
+
+
+def test_parse_pro_xlsx():
+    from pathlib import Path
+
+    path = Path("../pro.xlsx")
+    if path.exists():
+        content = path.read_bytes()
+        parsed = parse_workbook(content)
+        assert (
+            parsed.resumes_url
+            == "https://drive.google.com/drive/folders/1pPADQHbZsoTAgyJbBTGb5T-sIGhUxXCr?usp=sharing"
+        )
+        assert len(parsed.students) == 20
+        student_names = [s[1].name for s in parsed.students]
+        assert "Student's Resume" not in student_names
+        assert "All resumes" not in student_names
+
+        quality_warnings = [
+            i
+            for i in parsed.issues
+            if i.code in ("project.abstract_missing", "project.prerequisites_missing")
+        ]
+        assert quality_warnings
+        assert all(i.severity == "warning" for i in quality_warnings)
+        assert all(not i.blocking for i in quality_warnings)
+
+        warned_rows = {i.row_number for i in quality_warnings}
+        for row_num, row, _ in parsed.mentor_projects:
+            if row_num in warned_rows:
+                if any(
+                    i.code == "project.abstract_missing" and i.row_number == row_num
+                    for i in quality_warnings
+                ):
+                    assert row.abstract is None
+                if any(
+                    i.code == "project.prerequisites_missing"
+                    and i.row_number == row_num
+                    for i in quality_warnings
+                ):
+                    assert row.prerequisites is None

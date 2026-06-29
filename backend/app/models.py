@@ -10,7 +10,12 @@ from app.features.candidates.models import (
     CandidateSkill,
 )
 from app.features.imports.models import ImportBatch, ImportFile, ImportValidationIssue
-from app.features.matching.models import MatchResult, MatchResultExplanation, MatchRun
+from app.features.matching.models import (
+    BatchPairScore,
+    MatchResult,
+    MatchResultExplanation,
+    MatchRun,
+)
 from app.features.mentors.models import Mentor
 from app.features.projects.models import (
     Project,
@@ -43,4 +48,5 @@ __all__ = [
     "MatchRun",
     "MatchResult",
     "MatchResultExplanation",
+    "BatchPairScore",
 ]

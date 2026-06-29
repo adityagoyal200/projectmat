@@ -6,7 +6,7 @@ Bulk Intake and Matching
 
 ## Status
 
-`[ ] Review`
+`[ ] Approved`
 
 ## Author
 
@@ -18,21 +18,21 @@ ProjectMatchAI Engineering Team
 
 ## Related Phase
 
-Phases 1-10 - Subsystem MVP
+Phases 1-10 - Standalone Upload-and-Review MVP
 
 ## Related ADR
 
-`specs/adrs/ADR-0001-bulk-intake-matching-subsystem.md`
+`specs/adrs/ADR-0001-standalone-bulk-intake-matching-mvp.md`
 
 ---
 
 ## 1. Problem Statement
 
-ProjectMatchAI now operates inside a larger program-management system. The larger system or a program operator will provide candidate/student data through spreadsheets and optional resume files, plus mentor/project data through workbooks like the provided alumni mentorship workbook.
+ProjectMatchAI is now a standalone upload-and-review app for the MVP. A program operator provides candidate/student data through spreadsheets and optional resume files, plus mentor/project data through workbooks like the provided alumni mentorship workbook.
 
 The problem is not just "read Excel." The system must safely handle messy real-world data, validate it, normalize it into canonical records, run explainable AI matching, and return auditable results for human review.
 
-If this is not solved correctly, recommendations will be hard to trust, impossible to reproduce, and difficult to integrate with the larger platform.
+If this is not solved correctly, recommendations will be hard to trust, impossible to reproduce, and difficult to evolve into a future integration.
 
 ---
 
@@ -59,7 +59,7 @@ This feature produces an approved architecture and specification first. Producti
 
 - As a program operator, I want to import a student workbook and a mentor/project workbook so that I do not manually re-enter program data.
 - As a program operator, I want row-level validation errors and warnings so that I can fix bad data before trusting the match results.
-- As an upstream system, I want to submit import files and check import status through an API so that ProjectMatchAI can run as a subsystem.
+- As a future integration consumer, I want a backend API boundary so that the core pipeline can later plug into a larger system without moving parsing or matching into the frontend.
 - As a reviewer, I want ranked candidates for every project with score components and explanations so that I can make informed final decisions.
 - As a technical operator, I want every match run tied to input versions and model versions so that recommendations can be audited and reproduced.
 
@@ -227,17 +227,18 @@ Large technology companies split this into separate services for ingestion, docu
 
 Detailed endpoint schemas are drafted in `specs/apis/bulk-intake-and-matching-api.md`. Initial API surface:
 
-| Method | Path                               | Description                              | Auth Required | Role                          |
-| ------ | ---------------------------------- | ---------------------------------------- | ------------- | ----------------------------- |
-| `POST` | `/api/import-batches`              | Create an import batch.                  | Yes           | integration/operator          |
-| `POST` | `/api/import-batches/{id}/files`   | Attach workbook or resume files.         | Yes           | integration/operator          |
-| `POST` | `/api/import-batches/{id}/parse`   | Parse attached workbooks.                | Yes           | integration/operator          |
-| `GET`  | `/api/import-batches/{id}`         | Get import status and summary.           | Yes           | integration/operator          |
-| `GET`  | `/api/import-batches/{id}/issues`  | List validation issues.                  | Yes           | integration/operator          |
-| `POST` | `/api/match-runs`                  | Create a match run from an import batch. | Yes           | integration/operator          |
-| `GET`  | `/api/match-runs/{id}`             | Get match-run status and metadata.       | Yes           | integration/operator          |
-| `GET`  | `/api/match-runs/{id}/results`     | Return ranked results as JSON.           | Yes           | integration/operator/reviewer |
-| `GET`  | `/api/match-runs/{id}/export.xlsx` | Download result workbook.                | Yes           | integration/operator/reviewer |
+| Method | Path                                                          | Description                                             | Auth Required | Role             |
+| ------ | ------------------------------------------------------------- | ------------------------------------------------------- | ------------- | ---------------- |
+| `POST` | `/api/import-batches`                                         | Create an import batch.                                 | No            | operator         |
+| `POST` | `/api/import-batches/{id}/files`                              | Attach workbook/resume files and parse synchronously.   | No            | operator         |
+| `GET`  | `/api/import-batches`                                         | Get import batch list and summaries.                    | No            | operator         |
+| `GET`  | `/api/candidates`                                             | List candidates.                                        | No            | operator         |
+| `GET`  | `/api/projects`                                               | List projects.                                          | No            | operator         |
+| `GET`  | `/api/matching/student-recommendations/{registration_number}` | Get project recommendations for an existing student.    | No            | student/operator |
+| `POST` | `/api/matching/student-recommendations`                       | Upload resume on-the-fly and fetch matching projects.   | No            | student          |
+| `GET`  | `/api/matching/project-recommendations/{project_id}`          | Get recommended students for a specific project.        | No            | mentor/operator  |
+| `GET`  | `/api/matching/batch-scores/{batch_id}`                       | Return deterministic matrix scores for the whole batch. | No            | operator         |
+| `POST` | `/api/matching/llm-preview`                                   | Preview LLM explanation generation.                     | No            | operator         |
 
 ---
 
@@ -282,6 +283,15 @@ candidates
   external_candidate_id: text
   full_name: text
   profile_text: text nullable
+  github_username: text nullable
+  github_metrics: json nullable
+  leetcode_username: text nullable
+  leetcode_metrics: json nullable
+  codeforces_username: text nullable
+  codeforces_metrics: json nullable
+  scholar_id: text nullable
+  scholar_metrics: json nullable
+  achievements: json nullable
   created_at: timestamp
   unique(import_batch_id, external_candidate_id)
 
@@ -339,37 +349,17 @@ project_preferences
   preference_rank: integer nullable
   source_text: text nullable
 
-match_runs
-  id: uuid primary key
-  import_batch_id: uuid foreign key
-  status: enum(queued, running, completed, failed, cancelled)
-  scoring_config_version: text
-  embedding_model_version: text
-  reranker_model_version: text nullable
-  generation_model_version: text nullable
-  started_at: timestamp nullable
-  completed_at: timestamp nullable
-  failure_reason: text nullable
-
-match_results
-  id: uuid primary key
-  match_run_id: uuid foreign key
-  project_id: uuid foreign key
-  candidate_id: uuid foreign key
-  rank: integer
-  final_score: numeric
-  semantic_score: numeric nullable
-  rerank_score: numeric nullable
-  skill_overlap_score: numeric nullable
-  resume_evidence_score: numeric nullable
-  preference_score: numeric nullable
-
-match_result_explanations
-  id: uuid primary key
-  match_result_id: uuid foreign key unique
-  explanation: text
-  generation_method: enum(llm, fallback)
-  prompt_version: text nullable
+batch_pair_scores
+  id: int primary key
+  batch_id: int foreign key
+  candidate_id: int foreign key
+  project_id: int foreign key
+  embedding_similarity: float
+  prerequisite_overlap: float
+  resume_experience: float
+  preference_signal: float
+  preliminary_score: float
+  computed_at: timestamp
 ```
 
 Existing or shared tables:
@@ -416,17 +406,18 @@ class ResumeEnrichmentService:
         """Parse linked resumes and enrich candidate profiles."""
 
 
-class MatchRunService:
-    async def create_run(self, batch_id: UUID, config: MatchRunConfig) -> MatchRun:
-        """Create and execute or enqueue a match run."""
+class MatchService:
+    async def recommend_projects_for_db_candidate(self, registration_number: str) -> StudentRecommendationsResponse:
+        """Recommend projects for an existing imported student."""
 
-    async def get_results(self, match_run_id: UUID) -> list[ProjectMatchResults]:
-        """Return persisted ranked results."""
+    async def recommend_projects_for_student(self, resume_bytes: bytes, preferred_topics: list[str]) -> StudentRecommendationsResponse:
+        """Parse resume in-memory and recommend projects."""
 
+    async def recommend_candidates_for_project(self, project_id: int) -> ProjectRecommendationsResponse:
+        """Recommend students for a project."""
 
-class ResultExportService:
-    async def export_xlsx(self, match_run_id: UUID) -> ExportedFile:
-        """Generate an XLSX export from persisted match results."""
+    async def compute_batch_scores(self, batch_id: int, force: bool = False) -> BatchScoreMatrixResponse:
+        """Return deterministic (no-LLM) scores for every student×project pair in a batch."""
 ```
 
 ---
@@ -454,13 +445,11 @@ MVP frontend is optional. If built, it is an internal review UI.
 
 ### New Pages
 
-| Route                     | Description                               |
-| ------------------------- | ----------------------------------------- |
-| `/imports`                | List import batches.                      |
-| `/imports/new`            | Upload workbook/resume files.             |
-| `/imports/:id`            | Show import status and validation issues. |
-| `/match-runs/:id`         | Show match-run status and result summary. |
-| `/match-runs/:id/results` | Review ranked project-candidate results.  |
+| Route                 | Description                        |
+| --------------------- | ---------------------------------- |
+| `/imports`            | List import batches.               |
+| `/imports/new`        | Upload workbook/resume files.      |
+| `/batch-score-matrix` | Review batch score matrix heatmap. |
 
 ### New Components
 
@@ -495,8 +484,8 @@ Summary:
 
 ## 14. Definition of Done
 
-- [ ] ADR-0001 is accepted or revised.
-- [ ] This feature spec is approved.
+- [x] ADR-0001 is accepted.
+- [x] This feature spec is approved.
 - [ ] Input workbook contract is documented.
 - [ ] Data model migration applies and rolls back cleanly.
 - [ ] Import parser has fixture-based tests using representative workbook rows.
@@ -513,13 +502,13 @@ Summary:
 
 ## 15. Open Questions
 
-| Question                                                                                                         | Owner             | Resolution Date                | Decision |
-| ---------------------------------------------------------------------------------------------------------------- | ----------------- | ------------------------------ | -------- |
-| Should MVP auth use service API key or service JWT from the larger platform?                                     | Product/Tech Lead | Before Phase 2 implementation  | Pending  |
-| Will resume files be uploaded to ProjectMatchAI or referenced from upstream storage?                             | Product/Tech Lead | Before Phase 3 implementation  | Pending  |
-| Should `Selected students` be treated as historical labels, reviewer feedback, or ignored for MVP scoring?       | Product/Tech Lead | Before Phase 8 implementation  | Pending  |
-| What is the minimum acceptable export format for program operators: project-centric, candidate-centric, or both? | Product/Tech Lead | Before Phase 10 implementation | Pending  |
+| Question                                                                                                   | Owner             | Resolution Date | Decision                                                                                                   |
+| ---------------------------------------------------------------------------------------------------------- | ----------------- | --------------- | ---------------------------------------------------------------------------------------------------------- |
+| Should MVP auth use service API key or service JWT?                                                        | Product/Tech Lead | 2026-06-29      | Neither for MVP. Add operator auth only before public deployment; service auth is deferred to integration. |
+| Will resume files be uploaded to ProjectMatchAI or referenced from upstream storage?                       | Product/Tech Lead | 2026-06-29      | Uploaded with the import batch for MVP.                                                                    |
+| Should `Selected students` be treated as historical labels, reviewer feedback, or ignored for MVP scoring? | Product/Tech Lead | 2026-06-29      | Store as historical label/source signal only. Do not boost score from it in MVP.                           |
+| What is the minimum acceptable export format for program operators?                                        | Product/Tech Lead | 2026-06-29      | Project-centric JSON and XLSX first. Candidate-centric export is deferred.                                 |
 
 ---
 
-_This feature is intentionally in review. Implementation begins only after ADR and architecture approval._
+_This feature is approved for phased implementation. Keep production code aligned with the phase-specific plan and validation checklist._

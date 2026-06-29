@@ -1,32 +1,35 @@
 # Bulk Intake and Matching API
 
-> Status: Review
+> Status: Approved
 > Related feature: `specs/features/2026-06-26-bulk-intake-and-matching/requirements.md`
-> Related ADR: `specs/adrs/ADR-0001-bulk-intake-matching-subsystem.md`
+> Related ADR: `specs/adrs/ADR-0001-standalone-bulk-intake-matching-mvp.md`
 
 ---
 
 ## Base Paths
 
-| Domain         | Base Path             |
-| -------------- | --------------------- |
-| Import batches | `/api/import-batches` |
-| Match runs     | `/api/match-runs`     |
+| Domain          | Base Path             |
+| --------------- | --------------------- |
+| Import batches  | `/api/import-batches` |
+| Candidates      | `/api/candidates`     |
+| Projects        | `/api/projects`       |
+| Mentors         | `/api/mentors`        |
+| Recommendations | `/api/matching`       |
+
+---
 
 ## Authentication
 
-MVP auth mode is an open architecture question. The API must support one of:
+MVP endpoints are unauthenticated while the app is local/operator-run. Add operator authentication before any public deployment. Service API keys or service JWTs are deferred until a real external integration exists.
 
-- Service API key for trusted upstream system calls.
-- Service JWT issued by the larger platform.
+Endpoint specs use caller roles for clarity:
 
-Until resolved, endpoint specs use caller roles:
-
-| Caller        | Description                                                            |
-| ------------- | ---------------------------------------------------------------------- |
-| `integration` | Trusted upstream system submitting imports and consuming results.      |
-| `operator`    | Program operator uploading files, reviewing issues, and starting runs. |
-| `reviewer`    | Human reviewer reading ranked results and explanations.                |
+| Caller     | Description                                                            |
+| ---------- | ---------------------------------------------------------------------- |
+| `operator` | Program operator uploading files, reviewing issues, and starting runs. |
+| `reviewer` | Human reviewer reading ranked results and explanations.                |
+| `student`  | Student candidate uploading resume or querying recommendations.        |
+| `mentor`   | Project mentor reviewing candidate recommendation fit.                 |
 
 ---
 
@@ -56,327 +59,93 @@ error
 warning
 ```
 
-### Match Run Status
-
-```text
-queued
-running
-completed
-failed
-cancelled
-```
-
 ---
 
 ## Endpoints
 
-## `POST /api/import-batches`
+### `GET /api/import-batches`
 
-Summary: Create a new import batch.
+Summary: List all import batches with candidate and project counts.
 
-Auth: Required. Caller: `integration` or `operator`.
+Auth: Not required in MVP. Caller: `operator`.
 
-### Request Body
+### Response - `200 OK`
 
 ```json
-{
-  "source_system": "program-portal",
-  "source_reference": "summer-internship-2026",
-  "notes": "Alumni mentorship import"
-}
+[
+  {
+    "id": 1,
+    "status": "validated",
+    "created_at": "2026-06-26T12:00:00Z",
+    "candidate_count": 20,
+    "project_count": 8
+  }
+]
 ```
+
+---
+
+### `POST /api/import-batches`
+
+Summary: Create a new empty import batch.
+
+Auth: Not required in MVP. Caller: `operator`.
 
 ### Response - `201 Created`
 
 ```json
 {
-  "id": "550e8400-e29b-41d4-a716-446655440000",
-  "source_system": "program-portal",
-  "source_reference": "summer-internship-2026",
-  "status": "created",
-  "created_at": "2026-06-26T12:00:00Z"
+  "id": 1,
+  "status": "created"
 }
 ```
 
-### Side Effects
-
-- Creates an `import_batches` record.
-- Writes an audit log.
-
 ---
 
-## `POST /api/import-batches/{batch_id}/files`
+### `POST /api/import-batches/{batch_id}/files`
 
-Summary: Attach a workbook or resume file to an import batch.
+Summary: Attach a workbook or resume file to an import batch and parse it synchronously.
 
-Auth: Required. Caller: `integration` or `operator`.
+Auth: Not required in MVP. Caller: `operator`.
 
 Content-Type: `multipart/form-data`
 
 ### Path Parameters
 
-| Parameter  | Type   | Required | Description      |
-| ---------- | ------ | -------- | ---------------- |
-| `batch_id` | `UUID` | Yes      | Import batch id. |
+| Parameter  | Type  | Required | Description      |
+| ---------- | ----- | -------- | ---------------- |
+| `batch_id` | `int` | Yes      | Import batch id. |
 
 ### Form Fields
 
-| Field                   | Type   | Required | Description                                  |
-| ----------------------- | ------ | -------- | -------------------------------------------- |
-| `file`                  | file   | Yes      | Workbook or resume file.                     |
-| `file_type`             | string | Yes      | `workbook`, `resume`, or `other`.            |
-| `candidate_external_id` | string | No       | Optional direct resume-to-candidate mapping. |
-
-### Response - `201 Created`
-
-```json
-{
-  "id": "6fa459ea-ee8a-3ca4-894e-db77e160355e",
-  "import_batch_id": "550e8400-e29b-41d4-a716-446655440000",
-  "file_name": "students.xlsx",
-  "file_type": "workbook",
-  "status": "uploaded",
-  "checksum": "sha256:...",
-  "created_at": "2026-06-26T12:05:00Z"
-}
-```
-
-### Error Responses
-
-| Status | Condition                           |
-| ------ | ----------------------------------- |
-| `400`  | Unsupported file type.              |
-| `404`  | Import batch not found.             |
-| `413`  | File exceeds configured size limit. |
-
-### Side Effects
-
-- Stores the file in configured storage.
-- Creates an `import_files` record.
-- Writes an audit log.
-
----
-
-## `POST /api/import-batches/{batch_id}/parse`
-
-Summary: Parse attached workbooks and create validation issues plus canonical/staged import records.
-
-Auth: Required. Caller: `integration` or `operator`.
-
-### Request Body
-
-```json
-{
-  "strict": false
-}
-```
-
-`strict=false` means warnings do not block normalization or later match runs. Errors always block match runs until resolved or explicitly excluded by a future approved workflow.
-
-### Response - `202 Accepted`
-
-```json
-{
-  "import_batch_id": "550e8400-e29b-41d4-a716-446655440000",
-  "status": "parsing",
-  "message": "Workbook parsing started"
-}
-```
-
-### Side Effects
-
-- Starts parsing work in-process for MVP or queues it in a future worker.
-- Creates validation issue records.
-- Updates import batch status.
-
----
-
-## `GET /api/import-batches/{batch_id}`
-
-Summary: Fetch import batch status and summary counts.
-
-Auth: Required. Caller: `integration` or `operator`.
+| Field       | Type   | Required | Description                                       |
+| ----------- | ------ | -------- | ------------------------------------------------- |
+| `file`      | file   | Yes      | Workbook file (currently only `.xlsx` supported). |
+| `file_type` | string | Yes      | `workbook`.                                       |
 
 ### Response - `200 OK`
 
 ```json
 {
-  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "id": 1,
   "status": "validated",
-  "source_system": "program-portal",
-  "source_reference": "summer-internship-2026",
-  "counts": {
-    "files": 4,
-    "candidates": 22,
-    "mentors": 13,
-    "projects": 8,
-    "errors": 0,
-    "warnings": 6
-  },
-  "created_at": "2026-06-26T12:00:00Z",
-  "completed_at": "2026-06-26T12:08:00Z"
-}
-```
-
----
-
-## `GET /api/import-batches/{batch_id}/issues`
-
-Summary: List validation issues for an import batch.
-
-Auth: Required. Caller: `integration` or `operator`.
-
-### Query Parameters
-
-| Parameter   | Type   | Required | Default | Description           |
-| ----------- | ------ | -------- | ------- | --------------------- |
-| `severity`  | string | No       | all     | `error` or `warning`. |
-| `page`      | int    | No       | `1`     | Page number.          |
-| `page_size` | int    | No       | `50`    | Max 200.              |
-
-### Response - `200 OK`
-
-```json
-{
-  "items": [
-    {
-      "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
-      "severity": "warning",
-      "code": "candidate.resume_missing",
-      "message": "Candidate references a resume file that was not attached to the batch.",
-      "sheet_name": "Students Info",
-      "row_number": 3,
-      "raw_value": "Ahana_Sen_MDS202505.pdf"
+  "can_proceed": true,
+  "sheet_summaries": {
+    "Students Info": {
+      "total_rows": 20,
+      "errors": 0,
+      "warnings": 1
     }
-  ],
-  "total": 1,
-  "page": 1,
-  "page_size": 50,
-  "pages": 1
-}
-```
-
----
-
-## `POST /api/match-runs`
-
-Summary: Create and start a match run from a validated import batch.
-
-Auth: Required. Caller: `integration` or `operator`.
-
-### Request Body
-
-```json
-{
-  "import_batch_id": "550e8400-e29b-41d4-a716-446655440000",
-  "top_k_per_project": 20,
-  "scoring_config": {
-    "semantic_weight": 0.35,
-    "rerank_weight": 0.35,
-    "skill_overlap_weight": 0.2,
-    "resume_evidence_weight": 0.05,
-    "preference_weight": 0.05
-  }
-}
-```
-
-### Response - `202 Accepted`
-
-```json
-{
-  "id": "7d444840-9dc0-11d1-b245-5ffdce74fad2",
-  "import_batch_id": "550e8400-e29b-41d4-a716-446655440000",
-  "status": "queued",
-  "scoring_config_version": "mvp-v1",
-  "created_at": "2026-06-26T12:10:00Z"
-}
-```
-
-### Error Responses
-
-| Status | Condition                                                 |
-| ------ | --------------------------------------------------------- |
-| `400`  | Import batch has blocking validation errors.              |
-| `404`  | Import batch not found.                                   |
-| `409`  | A match run with the same idempotency key already exists. |
-
-### Side Effects
-
-- Creates a `match_runs` record.
-- Starts the match workflow.
-- Emits `match_run.started` when execution begins.
-
----
-
-## `GET /api/match-runs/{match_run_id}`
-
-Summary: Fetch match-run status and metadata.
-
-Auth: Required. Caller: `integration`, `operator`, or `reviewer`.
-
-### Response - `200 OK`
-
-```json
-{
-  "id": "7d444840-9dc0-11d1-b245-5ffdce74fad2",
-  "import_batch_id": "550e8400-e29b-41d4-a716-446655440000",
-  "status": "completed",
-  "scoring_config_version": "mvp-v1",
-  "embedding_model_version": "BAAI/bge-m3",
-  "reranker_model_version": "bge-reranker-v2",
-  "generation_model_version": "groq:llama-3.1-8b-instant",
-  "started_at": "2026-06-26T12:10:10Z",
-  "completed_at": "2026-06-26T12:12:30Z",
-  "failure_reason": null,
-  "counts": {
-    "projects": 8,
-    "results": 160
-  }
-}
-```
-
----
-
-## `GET /api/match-runs/{match_run_id}/results`
-
-Summary: Return persisted ranked results as JSON.
-
-Auth: Required. Caller: `integration`, `operator`, or `reviewer`.
-
-### Query Parameters
-
-| Parameter           | Type | Required | Default | Description                          |
-| ------------------- | ---- | -------- | ------- | ------------------------------------ |
-| `project_id`        | UUID | No       | null    | Filter to one project.               |
-| `limit_per_project` | int  | No       | `20`    | Max candidates returned per project. |
-
-### Response - `200 OK`
-
-```json
-{
-  "match_run_id": "7d444840-9dc0-11d1-b245-5ffdce74fad2",
-  "projects": [
+  },
+  "issues": [
     {
-      "project_id": "11111111-1111-1111-1111-111111111111",
-      "project_title": "Multimodel AI Agents",
-      "ranked_candidates": [
-        {
-          "rank": 1,
-          "candidate_id": "22222222-2222-2222-2222-222222222222",
-          "external_candidate_id": "MDS202504",
-          "candidate_name": "Agnivesh Chatterjee",
-          "final_score": 0.87,
-          "scores": {
-            "semantic": 0.89,
-            "rerank": 0.91,
-            "skill_overlap": 0.75,
-            "resume_evidence": 0.7,
-            "preference": 0.0
-          },
-          "explanation": "This candidate aligns strongly with the project's Python and computer vision requirements based on resume and imported profile evidence. The recommendation is strengthened by high semantic and reranker scores, while the remaining gap is Docker-specific project experience.",
-          "warnings": []
-        }
-      ]
+      "sheet_name": "Students Info",
+      "row_number": 2,
+      "column_name": "Email",
+      "code": "MISSING_EMAIL",
+      "severity": "warning",
+      "message": "Candidate email is missing.",
+      "blocking": false
     }
   ]
 }
@@ -384,66 +153,208 @@ Auth: Required. Caller: `integration`, `operator`, or `reviewer`.
 
 ---
 
-## `GET /api/match-runs/{match_run_id}/export.xlsx`
+### `GET /api/candidates`
 
-Summary: Download an XLSX export generated from persisted match results.
+Summary: List all staged candidates in the system.
 
-Auth: Required. Caller: `integration`, `operator`, or `reviewer`.
+Auth: Not required in MVP. Caller: `operator` or `student`.
+
+### Query Parameters
+
+| Parameter         | Type | Required | Description                  |
+| ----------------- | ---- | -------- | ---------------------------- |
+| `import_batch_id` | int  | No       | Filter by specific batch ID. |
 
 ### Response - `200 OK`
 
-Content-Type: `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
-
-The workbook must include:
-
-- Match-run metadata.
-- Project-centric ranked candidate sheets or sections.
-- Component score columns.
-- Explanation column.
-- Data quality warning column.
-
-### Error Responses
-
-| Status | Condition                    |
-| ------ | ---------------------------- |
-| `404`  | Match run not found.         |
-| `409`  | Match run has not completed. |
+```json
+[
+  {
+    "id": 1,
+    "import_batch_id": 1,
+    "registration_number": "MDS202504",
+    "name": "Agnivesh Chatterjee",
+    "email": "silvercarbideagc@gmail.com",
+    "phone": "8420725911"
+  }
+]
+```
 
 ---
 
-## Common Error Shape
+### `GET /api/candidates/{id}`
+
+Summary: Fetch specific candidate details and parsed skills.
+
+Auth: Not required in MVP. Caller: `operator`.
+
+### Response - `200 OK`
 
 ```json
 {
-  "detail": "Human-readable error message"
+  "id": 1,
+  "registration_number": "MDS202504",
+  "name": "Agnivesh Chatterjee",
+  "email": "silvercarbideagc@gmail.com",
+  "phone": "8420725911",
+  "skills": ["Python", "Computer Vision", "Shell", "Docker"],
+  "has_resume": true
 }
 ```
 
-Validation errors use FastAPI/Pydantic's standard `422` shape.
+---
+
+### `GET /api/projects`
+
+Summary: List all staging projects.
+
+Auth: Not required in MVP. Caller: `operator` or `mentor`.
+
+### Query Parameters
+
+| Parameter         | Type | Required | Description                  |
+| ----------------- | ---- | -------- | ---------------------------- |
+| `import_batch_id` | int  | No       | Filter by specific batch ID. |
+
+### Response - `200 OK`
+
+```json
+[
+  {
+    "id": 1,
+    "import_batch_id": 1,
+    "title": "Multimodel AI Agents",
+    "mentor_name": "Prasun Agarwal",
+    "has_abstract": true
+  }
+]
+```
 
 ---
 
-## Idempotency
+### `GET /api/projects/{id}`
 
-Integration callers should send an `Idempotency-Key` header for:
-
-- `POST /api/import-batches`
-- `POST /api/import-batches/{batch_id}/files`
-- `POST /api/match-runs`
-
-Exact persistence behavior should be finalized before implementation.
+Summary: Fetch specific project details.
 
 ---
 
-## Open API Questions
+### `GET /api/mentors`
 
-| Question                                                                            | Required Before         | Status   |
-| ----------------------------------------------------------------------------------- | ----------------------- | -------- |
-| Service API key vs service JWT?                                                     | Phase 2 implementation  | Pending  |
-| Should parsing be synchronous for small files or always backgrounded?               | Phase 2 implementation  | Pending  |
-| Should result export be generated on demand or cached as an `import_file`/artifact? | Phase 10 implementation | Pending  |
-| Should reviewer result edits be accepted in MVP?                                    | Post-MVP feedback phase | Deferred |
+Summary: List all staging mentors and their linked projects.
+
+Auth: Not required in MVP. Caller: `operator`.
 
 ---
 
-_API spec version 0.1 - review draft._
+### `GET /api/mentors/{id}`
+
+Summary: Fetch specific mentor details.
+
+---
+
+### `POST /api/matching/llm-preview`
+
+Summary: Test the configured LLM provider without running full matching.
+
+Auth: Not required in MVP. Caller: `operator`.
+
+---
+
+### `GET /api/matching/student-recommendations/{registration_number}`
+
+Summary: Get project recommendations for an existing imported student using their registration number.
+
+Auth: Not required in MVP. Caller: `student` or `operator`.
+
+### Path Parameters
+
+| Parameter             | Type   | Required | Description                     |
+| --------------------- | ------ | -------- | ------------------------------- |
+| `registration_number` | string | Yes      | Staged candidate registration # |
+
+### Response - `200 OK`
+
+```json
+{
+  "candidate_name": "Agnivesh Chatterjee",
+  "registration_number": "MDS202504",
+  "recommendations": [
+    {
+      "rank": 1,
+      "project_id": 1,
+      "project_title": "Multimodel AI Agents",
+      "mentor_name": "Prasun Agarwal",
+      "final_score": 0.87,
+      "score_components": {
+        "embedding_similarity": 0.82,
+        "prerequisite_overlap": 0.8,
+        "resume_experience": 0.75,
+        "github_score": 0.9,
+        "coding_profile_score": 0.85,
+        "achievements_score": 0.7,
+        "llm_fit_score": 0.8
+      },
+      "explanation": "You are a strong fit for this project due to your background in Python, PyTorch, and Computer Vision."
+    }
+  ]
+}
+```
+
+---
+
+### `POST /api/matching/student-recommendations`
+
+Summary: Upload a student resume PDF to parse it in-memory on-the-fly and fetch matching projects.
+
+Auth: Not required in MVP. Caller: `student`.
+
+Content-Type: `multipart/form-data`
+
+### Form Fields
+
+| Field              | Type   | Required | Description                                 |
+| ------------------ | ------ | -------- | ------------------------------------------- |
+| `resume`           | file   | Yes      | PDF file of candidate resume.               |
+| `preferred_topics` | string | No       | Optional comma-separated interest keywords. |
+
+---
+
+### `GET /api/matching/project-recommendations/{project_id}`
+
+Summary: Get recommended student candidates for a specific project.
+
+Auth: Not required in MVP. Caller: `mentor` or `operator`.
+
+### Path Parameters
+
+| Parameter    | Type  | Required | Description         |
+| ------------ | ----- | -------- | ------------------- |
+| `project_id` | `int` | Yes      | Staging project ID. |
+
+---
+
+### `GET /api/matching/batch-scores/{batch_id}`
+
+Summary: Return deterministic (no-LLM) scores for every student×project pair in a batch. Scores are computed and persisted (cached in the database).
+
+Auth: Not required in MVP. Caller: `operator`.
+
+### Query Parameters
+
+| Parameter | Type | Required | Description                                      |
+| --------- | ---- | -------- | ------------------------------------------------ |
+| `force`   | bool | No       | Pass `true` to clear cache and recompute matrix. |
+
+---
+
+## Deferred API Questions
+
+| Question                                                              | Required Before         | Status                                              |
+| --------------------------------------------------------------------- | ----------------------- | --------------------------------------------------- |
+| Service API key vs service JWT?                                       | External integration    | Deferred                                            |
+| Should result export be generated on demand or cached as an artifact? | Phase 5 completion      | Deferred (CSV/XLSX generation not yet implemented). |
+| Should reviewer result edits be accepted in MVP?                      | Post-MVP feedback phase | Deferred                                            |
+
+---
+
+_API spec version 0.3 - updated for current deterministic matrix implementation._

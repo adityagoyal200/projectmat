@@ -46,8 +46,10 @@ class ValidationIssueOut(BaseModel):
     sheet_name: str | None = None
     row_number: int | None = None
     column_name: str | None = None
+    code: str | None = None
     severity: Literal["error", "warning"]
     message: str
+    blocking: bool = False
 
 
 class SheetSummary(BaseModel):
@@ -59,8 +61,26 @@ class SheetSummary(BaseModel):
 class ImportBatchResponse(BaseModel):
     id: int
     status: Literal["created", "parsing", "validated", "failed"]
+    can_proceed: bool = True
     sheet_summaries: dict[str, SheetSummary]
     issues: list[ValidationIssueOut]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ImportBatchSummary(BaseModel):
+    id: int
+    status: Literal["created", "parsing", "validated", "failed"]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ImportBatchListItem(BaseModel):
+    id: int
+    status: Literal["created", "parsing", "validated", "failed"]
+    created_at: str  # ISO datetime string
+    candidate_count: int = 0
+    project_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -79,5 +99,6 @@ class ParsedWorkbook(BaseModel):
         Field(default_factory=list)
     )
     issues: list[ValidationIssueOut] = Field(default_factory=list)
+    resumes_url: str | None = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)

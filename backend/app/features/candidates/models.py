@@ -1,93 +1,112 @@
+from __future__ import annotations
+
+from datetime import datetime
+from typing import TYPE_CHECKING
+
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String
-from sqlalchemy.orm import relationship
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from app.database import Base
+
+if TYPE_CHECKING:
+    from app.features.imports.models import ImportBatch, ImportFile
+    from app.features.shared.models import Skill
 
 
 class Candidate(Base):
     __tablename__ = "candidates"
 
-    id = Column(Integer, primary_key=True, index=True)
-    import_batch_id = Column(
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    import_batch_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("import_batches.id", ondelete="SET NULL"), nullable=True
     )
-    registration_number = Column(
+    registration_number: Mapped[str] = mapped_column(
         String(255), unique=True, index=True, nullable=False
-    )  # Enforced uniqueness
-    name = Column(String(255), nullable=False)
-    email = Column(String(255), nullable=True)
-    phone = Column(String(50), nullable=True)
-
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    import_batch = relationship("ImportBatch", back_populates="candidates")
-    documents = relationship(
-        "CandidateDocument", back_populates="candidate", cascade="all, delete-orphan"
+    import_batch: Mapped[ImportBatch | None] = relationship(back_populates="candidates")
+    documents: Mapped[list[CandidateDocument]] = relationship(
+        back_populates="candidate", cascade="all, delete-orphan"
     )
-    skills = relationship(
-        "CandidateSkill", back_populates="candidate", cascade="all, delete-orphan"
+    skills: Mapped[list[CandidateSkill]] = relationship(
+        back_populates="candidate", cascade="all, delete-orphan"
     )
-    embeddings = relationship(
-        "CandidateEmbedding", back_populates="candidate", cascade="all, delete-orphan"
+    embeddings: Mapped[list[CandidateEmbedding]] = relationship(
+        back_populates="candidate", cascade="all, delete-orphan"
     )
 
 
 class CandidateDocument(Base):
     __tablename__ = "candidate_documents"
 
-    id = Column(Integer, primary_key=True, index=True)
-    candidate_id = Column(
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    candidate_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("candidates.id", ondelete="CASCADE"), nullable=False
     )
-    import_file_id = Column(
+    import_file_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("import_files.id", ondelete="SET NULL"), nullable=True
     )
-    document_type = Column(String(50), nullable=False, default="resume")
-    parse_status = Column(String(50), nullable=False, default="pending")
-    parsed_text = Column(String, nullable=True)  # Text extraction from resume
+    document_type: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="resume"
+    )
+    parse_status: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="pending"
+    )
+    parsed_text: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-
-    candidate = relationship("Candidate", back_populates="documents")
-    import_file = relationship("ImportFile")
+    candidate: Mapped[Candidate] = relationship(back_populates="documents")
+    import_file: Mapped[ImportFile | None] = relationship()
 
 
 class CandidateSkill(Base):
     __tablename__ = "candidate_skills"
 
-    id = Column(Integer, primary_key=True, index=True)
-    candidate_id = Column(
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    candidate_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("candidates.id", ondelete="CASCADE"), nullable=False
     )
-    skill_id = Column(
+    skill_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("skills.id", ondelete="CASCADE"), nullable=False
     )
-    source = Column(String(100), nullable=True)  # e.g., 'resume', 'workbook'
-    confidence = Column(Float, nullable=True)
+    source: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
 
-    candidate = relationship("Candidate", back_populates="skills")
-    skill = relationship("Skill")
+    candidate: Mapped[Candidate] = relationship(back_populates="skills")
+    skill: Mapped[Skill] = relationship()
 
 
 class CandidateEmbedding(Base):
     __tablename__ = "candidate_embeddings"
 
-    id = Column(Integer, primary_key=True, index=True)
-    candidate_id = Column(
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    candidate_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("candidates.id", ondelete="CASCADE"), nullable=False
     )
-    model_name = Column(String(255), nullable=False)
-    model_version = Column(String(50), nullable=False)
-    schema_version = Column(String(50), nullable=False)
-    embedding = Column(
-        Vector(1024), nullable=False
-    )  # Using pgvector with example dimension 1024 for BGE-M3
+    model_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    model_version: Mapped[str] = mapped_column(String(50), nullable=False)
+    schema_version: Mapped[str] = mapped_column(String(50), nullable=False)
+    embedding: Mapped[list[float]] = mapped_column(Vector(1024), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    candidate: Mapped[Candidate] = relationship(back_populates="embeddings")
 
-    candidate = relationship("Candidate", back_populates="embeddings")
+
+if TYPE_CHECKING:
+    from app.features.imports.models import ImportBatch, ImportFile
+    from app.features.shared.models import Skill

@@ -44,7 +44,7 @@ The same backend should later support an upstream platform that submits candidat
 | G3  | Normalize messy source data into canonical candidates, mentors, projects, skills, technologies, and prerequisites.                   |
 | G4  | Match candidates to projects based on skills, semantic alignment, prerequisites, preferences, resume evidence, and growth potential. |
 | G5  | Provide explainable AI recommendations with score breakdowns and source-grounded rationale.                                          |
-| G6  | Produce auditable match-run outputs that can be reviewed by humans or consumed by an upstream system.                                |
+| G6  | Produce auditable match-run outputs that can be reviewed by humans now and consumed by a future integration later.                   |
 | G7  | Keep AI providers, embedding models, OCR engines, and parsers replaceable.                                                           |
 | G8  | Preserve privacy and consent boundaries for resumes, personal data, and generated embeddings.                                        |
 
@@ -75,11 +75,11 @@ The same backend should later support an upstream platform that submits candidat
 
 - Review ranked candidates for their projects.
 - Read score breakdowns and explanations.
-- Make final selections outside or inside the larger platform, depending on integration phase.
+- Make final selections outside ProjectMatchAI.
 
 ### Students and Candidates
 
-- Provide resumes and profile data through the larger system.
+- Provide resumes and profile data through the program operator's upload workflow.
 - Benefit from fairer matching and, in later phases, receive learning gap feedback.
 
 ### Future Integration Consumers

@@ -12,9 +12,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 
-import app.models
 from app.config import settings
 from app.dependencies import get_db
+from app.features.candidates.router import router as candidates_router
+from app.features.imports.router import router as imports_router
+from app.features.matching.router import router as matching_router
+from app.features.mentors.router import router as mentors_router
+from app.features.projects.router import router as projects_router
 
 # 1. Logging Setup Configuration
 shared_processors = [
@@ -127,10 +131,12 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
     return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 
 
-from app.features.imports.router import router as imports_router
-
 # 6. API Routing and Health Check Endpoints
 app.include_router(imports_router)
+app.include_router(candidates_router)
+app.include_router(mentors_router)
+app.include_router(projects_router)
+app.include_router(matching_router)
 
 
 @app.get("/api/health")
@@ -144,6 +150,11 @@ async def health_check(db: AsyncSession = Depends(get_db)) -> JSONResponse:
                 "status": "ok",
                 "database": "connected",
                 "environment": settings.ENV,
+                "llm": {
+                    "enabled": settings.LLM_ENABLED,
+                    "provider": settings.LLM_PROVIDER,
+                    "configured": settings.llm_is_configured(),
+                },
             },
         )
     except Exception as e:

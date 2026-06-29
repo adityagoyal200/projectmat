@@ -37,9 +37,7 @@ The system needs to produce AI-assisted matches and show them for human review. 
 
 ---
 
-## Decision
-
-We will implement ProjectMatchAI as a modular monolith standalone app with explicit bulk intake, normalization, match-run, explanation, review, and export boundaries. MVP will ingest workbook and resume inputs, validate and normalize them into canonical records, run versioned AI match jobs, persist score breakdowns and explanations, and show/export ranked recommendations for human review. Student/mentor portal features and external integration are deferred until the upload-and-review workflow is validated.
+We will implement ProjectMatchAI as a modular monolith standalone app with explicit bulk intake, normalization, batch-score-generation, explanation, review, and export boundaries. MVP will ingest workbook and resume inputs, validate and normalize them into canonical records, generate deterministic batch score matrices enriched by external developer profiles (GitHub, LeetCode, Codeforces, Google Scholar) and achievements. The scoring weights are structured to minimize LLM subjective scoring down to 5%, with 30% assigned to GitHub (verified via repository and code quality checks) and 10% to academic achievements. Student/mentor portal features and external integration are deferred until the upload-and-review workflow is validated.
 
 ---
 
@@ -49,7 +47,7 @@ Primary reasons:
 
 1. Frontend/backend boundary matches the new requirement: the frontend should only upload files, trigger work, and show results; the backend should own parsing, validation, matching, explanations, and export.
 2. Bulk intake is the real risk: spreadsheet data is messy, so import validation and normalization must be first-class production features rather than temporary scripts.
-3. Match runs need auditability: recommendations must be reproducible, explainable, and tied to exact input, model, and scoring versions.
+3. Batch scores need auditability: recommendations must be reproducible, explainable, and tied to exact input, model, and scoring versions.
 4. A modular monolith is enough for MVP: separate services, task queues, and vector databases add operational complexity before scale proves they are needed.
 5. Portal features are not on the critical path: accounts, chat, notifications, and admin screens do not validate whether AI matching works.
 
@@ -141,7 +139,7 @@ It best satisfies KISS, YAGNI, Clean Architecture, AI Agnostic Design, Documenta
 
 By choosing this approach, we accept:
 
-- In-process job limits: MVP match runs may need worker timeouts and careful status reporting. Mitigation: persist match-run status and make worker extraction a future-compatible change.
+- In-process compute limits: MVP batch score matrix generation executes large cross-products and may need pagination or worker timeouts. Mitigation: persist deterministic pairs in `batch_pair_scores` and serve from cache, making worker extraction a future-compatible change.
 - Less portal polish initially: students and mentors do not directly interact with ProjectMatchAI in MVP. Mitigation: the operator review UI and exports support human review.
 - More upfront schema design: import and match-run auditability require more tables than a simple script. Mitigation: tables map directly to production needs and avoid speculative portal models.
 

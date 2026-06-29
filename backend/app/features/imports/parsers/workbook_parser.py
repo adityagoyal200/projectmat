@@ -104,6 +104,7 @@ def _map_headers(
         issues.append(
             ValidationIssueOut(
                 sheet_name=sheet_name,
+                code="sheet.empty",
                 severity="error",
                 message=f"Sheet '{sheet_name}' is empty.",
             )
@@ -131,6 +132,7 @@ def _map_headers(
                 ValidationIssueOut(
                     sheet_name=sheet_name,
                     row_number=1,
+                    code="sheet.required_column_missing",
                     severity="error",
                     message=f"Missing required column: '{expected}'.",
                 )
@@ -153,7 +155,10 @@ def _get_val(
     val = row[idx].value
     if val is None:
         return None
-    return str(val).strip()
+    cleaned = str(val).strip()
+    if cleaned.lower() in {"n/a", "na", "-"}:
+        return None
+    return cleaned
 
 
 def _is_empty_row(row: tuple[Any, ...]) -> bool:
@@ -163,7 +168,7 @@ def _is_empty_row(row: tuple[Any, ...]) -> bool:
 def _validate_email(email: str | None) -> bool:
     if not email:
         return True
-    if "@" not in email or email.strip().lower() in ["n/a", "na", "-"]:
+    if "@" not in email:
         return False
     return True
 
@@ -178,8 +183,10 @@ def parse_workbook(file_content: bytes) -> ParsedWorkbook:
     except Exception as e:
         issues.append(
             ValidationIssueOut(
+                code="workbook.open_failed",
                 severity="error",
                 message=f"Failed to open workbook: {e!s}",
+                blocking=True,
             )
         )
         return parsed
@@ -189,10 +196,44 @@ def parse_workbook(file_content: bytes) -> ParsedWorkbook:
     if not ws_students:
         issues.append(
             ValidationIssueOut(
-                severity="error", message="Missing sheet: 'Students Info'"
+                code="sheet.required_missing",
+                severity="error",
+                message="Missing sheet: 'Students Info'",
             )
         )
     else:
+        # Extract Google Drive folder hyperlink
+        resumes_url = None
+        if ws_students.max_row >= 25:
+            cell = ws_students.cell(row=25, column=2)
+            if cell.hyperlink and cell.hyperlink.target:
+                resumes_url = cell.hyperlink.target
+            elif (
+                cell.value
+                and isinstance(cell.value, str)
+                and ("drive.google.com" in cell.value or cell.value.startswith("http"))
+            ):
+                resumes_url = cell.value.strip()
+
+        if not resumes_url:
+            for row in ws_students.iter_rows(min_row=1):
+                for cell in row:
+                    if cell.hyperlink and cell.hyperlink.target:
+                        target = cell.hyperlink.target
+                        if "drive.google.com" in target:
+                            resumes_url = target
+                            break
+                    elif (
+                        cell.value
+                        and isinstance(cell.value, str)
+                        and "drive.google.com" in cell.value
+                    ):
+                        resumes_url = cell.value.strip()
+                        break
+                if resumes_url:
+                    break
+        parsed.resumes_url = resumes_url
+
         col_map = _map_headers(ws_students, "Students Info", issues)
         if col_map:
             seen_regs = set()
@@ -201,6 +242,9 @@ def parse_workbook(file_content: bytes) -> ParsedWorkbook:
                     continue
 
                 name = _get_val(row, col_map, "name")
+                if name and _clean_header(name) in ("student's resume", "all resumes"):
+                    continue
+
                 reg = _get_val(row, col_map, "registration number")
                 email = _get_val(row, col_map, "email")
                 phone = _get_val(row, col_map, "phone")
@@ -220,6 +264,7 @@ def parse_workbook(file_content: bytes) -> ParsedWorkbook:
                             sheet_name="Students Info",
                             row_number=r_idx,
                             column_name="Name",
+                            code="candidate.name_missing",
                             severity="error",
                             message="Student name is missing.",
                         )
@@ -230,6 +275,7 @@ def parse_workbook(file_content: bytes) -> ParsedWorkbook:
                             sheet_name="Students Info",
                             row_number=r_idx,
                             column_name="Registration Number",
+                            code="candidate.external_id_missing",
                             severity="error",
                             message="Registration number is missing.",
                         )
@@ -240,6 +286,7 @@ def parse_workbook(file_content: bytes) -> ParsedWorkbook:
                             sheet_name="Students Info",
                             row_number=r_idx,
                             column_name="Registration Number",
+                            code="candidate.external_id_duplicate",
                             severity="error",
                             message=f"Duplicate registration number: {reg}",
                         )
@@ -253,19 +300,9 @@ def parse_workbook(file_content: bytes) -> ParsedWorkbook:
                             sheet_name="Students Info",
                             row_number=r_idx,
                             column_name="Email",
+                            code="candidate.email_invalid",
                             severity="warning",
                             message=f"Invalid email format: {email}",
-                        )
-                    )
-
-                if not file:
-                    issues.append(
-                        ValidationIssueOut(
-                            sheet_name="Students Info",
-                            row_number=r_idx,
-                            column_name="File",
-                            severity="warning",
-                            message="Resume file is missing.",
                         )
                     )
 
@@ -276,7 +313,9 @@ def parse_workbook(file_content: bytes) -> ParsedWorkbook:
     if not ws_mentors:
         issues.append(
             ValidationIssueOut(
-                severity="error", message="Missing sheet: 'Mentors info'"
+                code="sheet.required_missing",
+                severity="error",
+                message="Missing sheet: 'Mentors info'",
             )
         )
     else:
@@ -297,6 +336,7 @@ def parse_workbook(file_content: bytes) -> ParsedWorkbook:
                             sheet_name="Mentors info",
                             row_number=r_idx,
                             column_name="Mentors",
+                            code="mentor.name_missing",
                             severity="error",
                             message="Mentor name is missing.",
                         )
@@ -307,6 +347,7 @@ def parse_workbook(file_content: bytes) -> ParsedWorkbook:
                             sheet_name="Mentors info",
                             row_number=r_idx,
                             column_name="email id",
+                            code="mentor.email_invalid",
                             severity="warning",
                             message=f"Invalid email format: {email}",
                         )
@@ -319,7 +360,9 @@ def parse_workbook(file_content: bytes) -> ParsedWorkbook:
     if not ws_projects:
         issues.append(
             ValidationIssueOut(
-                severity="error", message="Missing sheet: 'Mentors-projects'"
+                code="sheet.required_missing",
+                severity="error",
+                message="Missing sheet: 'Mentors-projects'",
             )
         )
     else:
@@ -357,6 +400,7 @@ def parse_workbook(file_content: bytes) -> ParsedWorkbook:
                             sheet_name="Mentors-projects",
                             row_number=r_idx,
                             column_name="Mentors",
+                            code="project.mentor_missing",
                             severity="error",
                             message="Mentor name is missing.",
                         )
@@ -367,8 +411,31 @@ def parse_workbook(file_content: bytes) -> ParsedWorkbook:
                             sheet_name="Mentors-projects",
                             row_number=r_idx,
                             column_name="Project Title",
+                            code="project.title_missing",
                             severity="error",
                             message="Project title is missing.",
+                        )
+                    )
+                if not abstract:
+                    issues.append(
+                        ValidationIssueOut(
+                            sheet_name="Mentors-projects",
+                            row_number=r_idx,
+                            column_name="Project Abstract",
+                            code="project.abstract_missing",
+                            severity="warning",
+                            message="Project abstract is missing.",
+                        )
+                    )
+                if not prereqs:
+                    issues.append(
+                        ValidationIssueOut(
+                            sheet_name="Mentors-projects",
+                            row_number=r_idx,
+                            column_name="Pre-requisites",
+                            code="project.prerequisites_missing",
+                            severity="warning",
+                            message="Project prerequisites are missing.",
                         )
                     )
 
@@ -379,7 +446,8 @@ def parse_workbook(file_content: bytes) -> ParsedWorkbook:
     # 4. Probable projects
     ws_probable = _find_sheet(wb, "Probable projects")
     if not ws_probable:
-        # Optional sheet, but we log a warning if we want to be strict. The spec doesn't require it to fail.
+        # Optional sheet, but we log a warning if we want to be strict.
+        # The spec doesn't require it to fail.
         pass
     else:
         col_map = _map_headers(ws_probable, "Probable projects", issues)
@@ -400,6 +468,7 @@ def parse_workbook(file_content: bytes) -> ParsedWorkbook:
                             sheet_name="Probable projects",
                             row_number=r_idx,
                             column_name="Project Idea",
+                            code="project_idea.missing",
                             severity="warning",
                             message="Project idea is missing.",
                         )

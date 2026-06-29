@@ -1,34 +1,57 @@
+from unittest.mock import patch
+
 import pytest
 
 from app.features.imports.models import ImportBatch, ImportFile
 from app.features.imports.service import WorkbookImportService
 
 
-@pytest.mark.asyncio
-async def test_service_creates_batch_and_persists_issues(mock_db):
-    # Setup mock behavior
+@pytest.mark.anyio
+async def test_service_creates_batch(mock_db):
     service = WorkbookImportService(mock_db)
 
-    # We will use the valid workbook fixture content
-    with open("tests/fixtures/valid_workbook.xlsx", "rb") as f:
+    def assign_id(instance):
+        if isinstance(instance, ImportBatch):
+            instance.id = 1
+
+    mock_db.add.side_effect = assign_id
+
+    result = await service.create_batch()
+
+    assert result.id == 1
+    assert result.status == "created"
+    assert mock_db.add.called
+    assert mock_db.flush.called
+    assert mock_db.commit.called
+    assert mock_db.refresh.called
+
+
+@pytest.mark.anyio
+@patch("app.features.imports.service.asyncio.create_task")
+async def test_service_parses_workbook_and_persists_issues(_mock_create_task, mock_db):
+    service = WorkbookImportService(mock_db)
+    batch = ImportBatch(id=1, status="created")
+    mock_db.get.return_value = batch
+
+    from pathlib import Path
+
+    with Path("tests/fixtures/valid_workbook.xlsx").open("rb") as f:
         file_content = f.read()
 
-    # The mock flush will not populate batch.id automatically, so we simulate it
-    def side_effect_add(instance):
-        if isinstance(instance, ImportBatch) or isinstance(instance, ImportFile):
-            setattr(instance, "id", 1)
+    def assign_id(instance):
+        if isinstance(instance, ImportFile):
+            instance.id = 2
 
-    mock_db.add.side_effect = side_effect_add
+    mock_db.add.side_effect = assign_id
 
-    # Execute
-    result = await service.import_workbook("valid.xlsx", file_content)
+    result = await service.import_workbook(1, "valid.xlsx", file_content)
 
-    # Asserts
+    assert result.id == 1
     assert result.status == "validated"
+    assert result.can_proceed is True
     assert result.sheet_summaries["Students Info"].total_rows == 3
     assert result.sheet_summaries["Mentors info"].total_rows == 1
-
-    # Check that db methods were called
+    assert mock_db.get.called
     assert mock_db.add.called
     assert mock_db.flush.called
     assert mock_db.commit.called

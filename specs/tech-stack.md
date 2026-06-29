@@ -374,7 +374,7 @@ Future options:
 Initial export formats:
 
 - XLSX result workbook for program operators.
-- JSON API response for upstream systems.
+- JSON API response for the frontend and future integrations.
 
 Export content:
 

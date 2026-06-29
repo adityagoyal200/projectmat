@@ -1,16 +1,17 @@
 # Implementation Plan: Bulk Intake and Matching
 
-> This plan is not approval to implement production code. It defines the implementation sequence after ADR-0001 and the feature spec are approved.
+> ADR-0001 and the feature spec are approved. This plan defines the implementation sequence for the standalone upload-and-review MVP.
 
 ---
 
 ## 1. Architecture Approval
 
-- [ ] Review ADR-0001 with product owner and technical lead.
-- [ ] Resolve MVP auth boundary: service API key vs service JWT.
-- [ ] Resolve resume storage boundary: upload files vs upstream references.
-- [ ] Confirm whether historical `Selected students` should be used as labels only or scoring signal.
-- [ ] Approve or revise `requirements.md`.
+- [x] ADR-0001 accepted.
+- [x] Feature requirements approved.
+- [x] MVP auth boundary resolved: no application auth until public deployment or external integration.
+- [x] Resume storage boundary resolved: upload resume files with the import batch for MVP.
+- [x] Historical `Selected students` decision resolved: store as labels/source signal only, not scoring boost.
+- [x] MVP export decision resolved: project-centric JSON and XLSX first.
 
 ---
 
@@ -168,7 +169,7 @@
 ## 13. Documentation and Validation
 
 - [ ] Add API specs for import and match-run endpoints.
-- [ ] Update README with subsystem MVP workflow once implementation exists.
+- [ ] Update README with upload-and-review MVP workflow once implementation exists.
 - [ ] Add fixture data notes for workbook/resume test files.
 - [ ] Run unit and integration test suites.
 - [ ] Validate feature against `validation.md`.
@@ -179,8 +180,8 @@
 
 Stop and return to architecture review if:
 
-- The upstream system requires ProjectMatchAI to own user identity or final allocations.
-- Resume files cannot be transferred or referenced under current privacy constraints.
+- Product scope changes to require user accounts, external integration, or final allocation ownership.
+- Resume files cannot be uploaded under current privacy constraints.
 - Workbooks vary so much that the documented input contract is insufficient.
 - Match runs require distributed processing before MVP is complete.
 
