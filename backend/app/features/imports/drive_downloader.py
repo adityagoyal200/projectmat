@@ -1,46 +1,86 @@
 import tempfile
+from pathlib import Path
 
 import fitz  # PyMuPDF
 import structlog
+from gdown.download import download
 from gdown.download_folder import download_folder
 
 logger = structlog.get_logger()
 
 
+def _read_downloaded_files(tmpdir: str) -> dict[str, bytes]:
+    resumes: dict[str, bytes] = {}
+    for file_path in Path(tmpdir).rglob("*"):
+        if file_path.is_file():
+            try:
+                resumes[file_path.name] = file_path.read_bytes()
+            except Exception as e:
+                logger.warning(
+                    "Failed to read downloaded resume file",
+                    filename=file_path.name,
+                    error=str(e),
+                )
+    return resumes
+
+
+def _extract_drive_file_id(url: str) -> str | None:
+    prefixes = ["id=", "/d/", "/file/d/"]
+    for prefix in prefixes:
+        if prefix in url:
+            value = url.split(prefix, 1)[1]
+            return value.split("/", 1)[0].split("&", 1)[0]
+    return None
+
+
 def download_resumes_from_drive(folder_url: str) -> dict[str, bytes]:
     """
-    Downloads all files from a public Google Drive folder.
+    Downloads resumes from a public Google Drive folder or file link.
     Returns a dictionary mapping filename -> file_content (bytes).
     """
     resumes: dict[str, bytes] = {}
     if not folder_url:
         return resumes
-    try:
-        from pathlib import Path
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            logger.info(
-                "Downloading Google Drive resumes", folder_url=folder_url, tmpdir=tmpdir
-            )
+    with tempfile.TemporaryDirectory() as tmpdir:
+        logger.info(
+            "Downloading Google Drive resumes", folder_url=folder_url, tmpdir=tmpdir
+        )
+        try:
             download_folder(url=folder_url, output=tmpdir, quiet=True)
+            resumes = _read_downloaded_files(tmpdir)
+            if resumes:
+                return resumes
+        except Exception as e:
+            logger.warning(
+                "Folder download failed, trying file fallback",
+                folder_url=folder_url,
+                error=str(e),
+            )
 
-            for file_path in Path(tmpdir).rglob("*"):
-                if file_path.is_file():
-                    try:
-                        resumes[file_path.name] = file_path.read_bytes()
-                    except Exception as e:
-                        logger.warn(
-                            "Failed to read downloaded resume file",
-                            filename=file_path.name,
-                            error=str(e),
-                        )
-    except Exception as e:
+        file_id = _extract_drive_file_id(folder_url)
+        if file_id:
+            file_url = f"https://drive.google.com/uc?id={file_id}"
+            output = Path(tmpdir) / f"{file_id}.pdf"
+            try:
+                download(url=file_url, output=str(output), quiet=True, fuzzy=True)
+                resumes = _read_downloaded_files(tmpdir)
+                if resumes:
+                    return resumes
+            except Exception as e:
+                logger.error(
+                    "Failed to download resumes from Google Drive",
+                    folder_url=folder_url,
+                    file_url=file_url,
+                    error=str(e),
+                )
+                return resumes
+
         logger.error(
             "Failed to download resumes from Google Drive",
             folder_url=folder_url,
-            error=str(e),
+            error="No downloadable files found",
         )
-
     return resumes
 
 

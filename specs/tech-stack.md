@@ -137,7 +137,7 @@ Expected core tables:
 | Projects   | `projects`, `project_prerequisites`, `project_preferences`, `project_embeddings`                      |
 | Matching   | `match_runs`, `match_results`, `match_result_explanations`                                            |
 | Shared     | `skills`, `technologies`, `tags`, `audit_logs`                                                        |
-| Evaluation | `evaluation_runs`, `evaluation_queries`                                                               |
+| Evaluation | `repository_evaluations`, `live_app_evaluations`                                                      |
 
 JSON columns are allowed only for:
 
@@ -193,6 +193,38 @@ Rules:
 - Raw parser output is not canonical profile data.
 - Parser confidence and failure reasons are stored.
 - Resume parsing is optional enrichment; imported spreadsheet fields still create candidate records.
+
+---
+
+## 6.1. Developer Profiles & Live Application Evaluation
+
+### Scraping Clients
+
+To enrich candidate developer profiles, lightweight clients fetch metrics from:
+
+- **GitHub REST API**: Stars, followers, repositories, and pull requests/OS contributions.
+- **LeetCode GraphQL API**: Submissions count (categorized by easy/medium/hard difficulty) and contest stats.
+- **Codeforces REST API**: Ranks and competitive ratings.
+- **Google Scholar (HTML Regex parser)**: Citation count, h-index, and publication records.
+
+### Static Repository Analyzer & Test Runner
+
+Static code inspection is executed locally or via cloned remote repositories.
+
+- Secrets detection (Regex key/token signatures).
+- Dependency manifest identification (`package.json`, `requirements.txt`, etc.).
+- Automated test framework detection (npm test, pytest).
+- Isolated test command execution (using `subprocess` limits and timeouts).
+
+### Playwright Headless Browser Crawls
+
+Live application URLs are verified from an end-user perspective using:
+
+- **Playwright Chromium**: A headless browser session that navigates to live app endpoints.
+- **Wakeup Timeout Tolerance**: Wait limits up to 45 seconds to handle server cold starts (Render/Streamlit).
+- **Tab Interaction**: Simulated clicks on primary dashboard tabs to test hydration.
+- **Console Log Listeners**: Observes browser console error/exception counts.
+- **Screenshots**: High-resolution PNG captures saved locally to serve as audit proof.
 
 ---
 

@@ -7,8 +7,10 @@ from __future__ import annotations
 
 import asyncio
 import math
+import os
 import re
 from collections import Counter
+from functools import lru_cache
 
 import structlog
 
@@ -50,11 +52,15 @@ def _load_model():
         return None
     try:
         from sentence_transformers import (
-            SentenceTransformer,  # type: ignore[import-untyped]
+            SentenceTransformer,  # pyright: ignore[reportMissingImports]
         )
 
         logger.info("Loading embedding model", model=settings.BGE_MODEL_NAME)
-        _model = SentenceTransformer(settings.BGE_MODEL_NAME)
+        hf_token = settings.HF_TOKEN.strip() or None
+        if hf_token:
+            os.environ.setdefault("HF_TOKEN", hf_token)
+            os.environ.setdefault("HUGGINGFACE_HUB_TOKEN", hf_token)
+        _model = SentenceTransformer(settings.BGE_MODEL_NAME, token=hf_token)
         return _model
     except Exception as e:
         logger.warn(
@@ -64,6 +70,7 @@ def _load_model():
         return None
 
 
+@lru_cache(maxsize=2048)
 def _encode_sync(text: str) -> list[float]:
     model = _load_model()
     if model is None:

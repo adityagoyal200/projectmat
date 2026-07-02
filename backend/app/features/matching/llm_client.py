@@ -230,7 +230,7 @@ async def _call_groq(
             content="",
             provider="groq",
             model=models[0] if models else None,
-            error=str(e),
+            error=str(e) or type(e).__name__,
             prompt_preview=prompt_preview,
         )
 
@@ -293,7 +293,7 @@ async def _call_gemini(
             content="",
             provider="gemini",
             model="gemini-1.5-flash",
-            error=str(e),
+            error=str(e) or type(e).__name__,
             prompt_preview=prompt_preview,
         )
 
@@ -311,7 +311,7 @@ async def _call_ollama(
     }
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.post(url, headers=headers, json=payload)
             if response.status_code != 200:
                 return LLMCompletionResult(
@@ -336,7 +336,7 @@ async def _call_ollama(
             content="",
             provider="ollama",
             model=model,
-            error=str(e),
+            error=str(e) or type(e).__name__,
             prompt_preview=prompt_preview,
         )
 
@@ -391,6 +391,6 @@ async def _call_openai(
             content="",
             provider="openai",
             model=model,
-            error=str(e),
+            error=str(e) or type(e).__name__,
             prompt_preview=prompt_preview,
         )

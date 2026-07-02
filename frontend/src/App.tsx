@@ -105,9 +105,14 @@ export default function App() {
   const [health, setHealth] = useState<HealthDetails | null>(null);
   const [healthLoading, setHealthLoading] = useState(true);
 
+  const [listsLoading, setListsLoading] = useState(false);
+  const [listsError, setListsError] = useState<string | null>(null);
+  const [listsLastLoadedAt, setListsLastLoadedAt] = useState<number | null>(null);
+
   const [workbookFile, setWorkbookFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [batchInfo, setBatchInfo] = useState<ImportBatchResponse | null>(null);
+  const [selectedBatchDetails, setSelectedBatchDetails] = useState<ImportBatchResponse | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
   const [candidates, setCandidates] = useState<Candidate[]>([]);
@@ -126,6 +131,13 @@ export default function App() {
 
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [preferredTopics, setPreferredTopics] = useState('');
+  const [githubUrl, setGithubUrl] = useState('');
+  const [leetcodeUrl, setLeetcodeUrl] = useState('');
+  const [codeforcesUrl, setCodeforcesUrl] = useState('');
+  const [kaggleUrl, setKaggleUrl] = useState('');
+  const [scholarUrl, setScholarUrl] = useState('');
+  const [liveAppUrl, setLiveAppUrl] = useState('');
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [resumeRecs, setResumeRecs] = useState<MatchRecommendation[]>([]);
   const [resumeMatchContext, setResumeMatchContext] = useState<{ candidateName: string; registrationNumber: string } | null>(null);
   const [resumeLoading, setResumeLoading] = useState(false);
@@ -154,6 +166,8 @@ export default function App() {
 
   // ── Data fetching ─────────────────────────────────────────────────────────
   const refreshLists = async () => {
+    setListsLoading(true);
+    setListsError(null);
     try {
       const [candRes, projRes, mentorRes, batchRes] = await Promise.all([
         client.get<Candidate[]>('/candidates'),
@@ -165,8 +179,11 @@ export default function App() {
       setProjects(projRes.data);
       setMentors(mentorRes.data);
       setImportBatches(batchRes.data);
+      setListsLastLoadedAt(Date.now());
     } catch (e) {
-      console.error('Failed to fetch lists', e);
+      setListsError(e instanceof Error ? e.message : 'Failed to fetch lists');
+    } finally {
+      setListsLoading(false);
     }
   };
 
@@ -175,17 +192,46 @@ export default function App() {
     try {
       const res = await client.get<HealthDetails>('/health');
       setHealth(res.data);
+      return res.data;
     } catch (e: unknown) {
-      setHealth({ error: e instanceof Error ? e.message : 'Connection failed' });
+      const err = { error: e instanceof Error ? e.message : 'Connection failed' } satisfies HealthDetails;
+      setHealth(err);
+      return null;
     } finally {
       setHealthLoading(false);
     }
   };
 
   useEffect(() => {
-    checkHealth();
-    refreshLists();
+    let cancelled = false;
+
+    const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    const bootstrap = async () => {
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const healthResult = await checkHealth();
+        if (cancelled) return;
+        const apiReady = healthResult?.status === 'ok';
+        const dbReady = healthResult?.database === 'connected';
+        if (apiReady && dbReady) break;
+        await sleep(600 + attempt * 600);
+        if (cancelled) return;
+      }
+      await refreshLists();
+    };
+
+    bootstrap();
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  useEffect(() => {
+    if (activeTab !== 'batches') return;
+    const stale = listsLastLoadedAt == null || Date.now() - listsLastLoadedAt > 15_000;
+    if (!stale) return;
+    void refreshLists();
+  }, [activeTab]);
 
   // ── Actions ───────────────────────────────────────────────────────────────
   const handleWorkbookUpload = async () => {
@@ -202,6 +248,8 @@ export default function App() {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       setBatchInfo(uploadRes.data);
+      setSelectedBatchDetails(uploadRes.data);
+      setSelectedBatchId(String(uploadRes.data.id));
       await refreshLists();
       setActiveTab('import');
     } catch (e: unknown) {
@@ -259,6 +307,12 @@ export default function App() {
       const formData = new FormData();
       formData.append('file', resumeFile);
       if (preferredTopics) formData.append('preferred_topics', preferredTopics);
+      if (githubUrl) formData.append('github_url', githubUrl);
+      if (leetcodeUrl) formData.append('leetcode_url', leetcodeUrl);
+      if (codeforcesUrl) formData.append('codeforces_url', codeforcesUrl);
+      if (kaggleUrl) formData.append('kaggle_url', kaggleUrl);
+      if (scholarUrl) formData.append('scholar_url', scholarUrl);
+      if (liveAppUrl) formData.append('live_app_url', liveAppUrl);
       const res = await client.post<StudentRecommendationsResponse>(
         '/matching/student-recommendations',
         formData,
@@ -313,10 +367,14 @@ export default function App() {
     setBatchScoreError(null);
     if (!force) setBatchMatrix(null);
     try {
-      const res = await client.get<BatchScoreMatrixResponse>(
-        `/matching/batch-scores/${batchId}${force ? '?force=true' : ''}`
-      );
-      setBatchMatrix(res.data);
+      const [batchRes, scoreRes] = await Promise.all([
+        client.get<ImportBatchResponse>(`/import-batches/${batchId}`),
+        client.get<BatchScoreMatrixResponse>(
+          `/matching/batch-scores/${batchId}${force ? '?force=true' : ''}`
+        ),
+      ]);
+      setSelectedBatchDetails(batchRes.data);
+      setBatchMatrix(scoreRes.data);
     } catch (e: unknown) {
       setBatchScoreError(e instanceof Error ? e.message : 'Failed to load batch scores');
     } finally {
@@ -326,6 +384,7 @@ export default function App() {
 
   const selectBatch = (id: string) => {
     setSelectedBatchId(id);
+    setSelectedBatchDetails(null);
     setBatchMatrix(null);
     setBatchScoreError(null);
     loadBatchScores(id);
@@ -414,6 +473,23 @@ export default function App() {
           </TabButton>
         </nav>
 
+        {listsError && (
+          <div className="mb-6 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200 backdrop-blur-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span>{listsError}</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={refreshLists}
+                disabled={listsLoading}
+                className="border-white/10 bg-white/[0.03]"
+              >
+                {listsLoading ? 'Refreshing…' : 'Retry'}
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* ═══════════════════════════════════════════════════════════
             MATCH TAB
         ═══════════════════════════════════════════════════════════ */}
@@ -497,15 +573,42 @@ export default function App() {
                 )}
 
                 {matchMode === 'resume' && (
-                  <div className="space-y-3 rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
-                    <Input type="file" accept=".pdf" onChange={(e) => setResumeFile(e.target.files?.[0] || null)} />
-                    <Input
-                      placeholder="Preferred topics (comma-separated, optional)"
-                      value={preferredTopics}
-                      onChange={(e) => setPreferredTopics(e.target.value)}
-                    />
-                    <Button onClick={handleResumeRecommendation} disabled={resumeLoading || !resumeFile} className="btn-glow">
-                      {resumeLoading ? 'Processing…' : 'Match resume to projects'}
+                  <div className="space-y-4 rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
+                    <div className="space-y-3">
+                      <Input type="file" accept=".pdf" onChange={(e) => setResumeFile(e.target.files?.[0] || null)} />
+                      <Input
+                        placeholder="Preferred topics (comma-separated, optional)"
+                        value={preferredTopics}
+                        onChange={(e) => setPreferredTopics(e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => setShowAdvanced(!showAdvanced)}
+                        className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        {showAdvanced ? 'Hide optional platform links ↑' : 'Show optional platform links ↓'}
+                      </button>
+
+                      {showAdvanced && (
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                          <Input placeholder="GitHub URL or Username" value={githubUrl} onChange={(e) => setGithubUrl(e.target.value)} />
+                          <Input placeholder="LeetCode URL or Username" value={leetcodeUrl} onChange={(e) => setLeetcodeUrl(e.target.value)} />
+                          <Input placeholder="Codeforces URL or Username" value={codeforcesUrl} onChange={(e) => setCodeforcesUrl(e.target.value)} />
+                          <Input placeholder="Kaggle URL or Username" value={kaggleUrl} onChange={(e) => setKaggleUrl(e.target.value)} />
+                          <Input placeholder="Google Scholar URL" value={scholarUrl} onChange={(e) => setScholarUrl(e.target.value)} />
+                          <Input placeholder="Live App URLs (comma-separated)" value={liveAppUrl} onChange={(e) => setLiveAppUrl(e.target.value)} />
+                          <p className="sm:col-span-2 text-[10px] text-muted-foreground">
+                            If provided, these links will be fetched live to score the Developer Profile accurately. If left blank, the system will try to extract them from the PDF.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    <Button onClick={handleResumeRecommendation} disabled={resumeLoading || !resumeFile} className="btn-glow w-full">
+                      {resumeLoading ? 'Processing & Fetching metrics…' : 'Match resume to projects'}
                     </Button>
                   </div>
                 )}
@@ -669,16 +772,26 @@ export default function App() {
                   Click a batch — scores load instantly from cache, or compute once and save automatically.
                 </p>
               </div>
-              {batchMatrix && (
+              <div className="flex items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => loadBatchScores(selectedBatchId, true)}
-                  disabled={batchScoreLoading}
+                  onClick={refreshLists}
+                  disabled={listsLoading}
                   className="text-xs text-muted-foreground hover:text-amber-300 transition-colors flex items-center gap-1.5 disabled:opacity-40"
                 >
-                  ↺ Recompute
+                  ↺ Refresh lists
                 </button>
-              )}
+                {batchMatrix && (
+                  <button
+                    type="button"
+                    onClick={() => loadBatchScores(selectedBatchId, true)}
+                    disabled={batchScoreLoading}
+                    className="text-xs text-muted-foreground hover:text-amber-300 transition-colors flex items-center gap-1.5 disabled:opacity-40"
+                  >
+                    ↺ Recompute
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Batch cards */}
@@ -732,9 +845,12 @@ export default function App() {
                         </span>
                       </div>
 
-                      <div className="relative flex gap-4 text-xs">
+                      <div className="relative flex flex-wrap gap-4 text-xs">
                         <span className="flex items-center gap-1.5 text-cyan-300/80">
                           <Users className="h-3 w-3" />{b.candidate_count} students
+                        </span>
+                        <span className="flex items-center gap-1.5 text-emerald-300/80">
+                          <User className="h-3 w-3" />{b.mentor_count} mentors
                         </span>
                         <span className="flex items-center gap-1.5 text-violet-300/80">
                           <FolderKanban className="h-3 w-3" />{b.project_count} projects
@@ -775,6 +891,77 @@ export default function App() {
                     />
                   ))}
                 </div>
+              </div>
+            )}
+
+            {selectedBatchDetails && !batchScoreLoading && (
+              <div className="glass-card overflow-hidden">
+                <div className="h-1 bg-gradient-to-r from-cyan-500 to-emerald-500" />
+                <CardHeader>
+                  <CardTitle className="text-base">Imported batch data</CardTitle>
+                  <CardDescription>
+                    Review the exact students, mentors, and projects stored for Batch #{selectedBatchDetails.id}.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <Meta label="Students" value={String(selectedBatchDetails.candidates.length)} />
+                    <Meta label="Mentors" value={String(selectedBatchDetails.mentors.length)} />
+                    <Meta label="Projects" value={String(selectedBatchDetails.projects.length)} />
+                  </div>
+
+                  <div className="grid gap-5 lg:grid-cols-3">
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-semibold text-foreground">Students</h3>
+                      <div className="max-h-72 space-y-2 overflow-y-auto rounded-xl border border-white/[0.06] bg-black/20 p-3">
+                        {selectedBatchDetails.candidates.length === 0 ? (
+                          <p className="text-xs text-muted-foreground">No students stored for this batch.</p>
+                        ) : (
+                          selectedBatchDetails.candidates.map((candidate) => (
+                            <div key={candidate.id} className="rounded-lg border border-white/[0.06] bg-white/[0.03] p-3 text-xs">
+                              <p className="font-semibold text-foreground">{candidate.name}</p>
+                              <p className="text-muted-foreground">{candidate.registration_number}</p>
+                              {candidate.email && <p className="text-muted-foreground">{candidate.email}</p>}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-semibold text-foreground">Mentors</h3>
+                      <div className="max-h-72 space-y-2 overflow-y-auto rounded-xl border border-white/[0.06] bg-black/20 p-3">
+                        {selectedBatchDetails.mentors.length === 0 ? (
+                          <p className="text-xs text-muted-foreground">No mentors stored for this batch.</p>
+                        ) : (
+                          selectedBatchDetails.mentors.map((mentor) => (
+                            <div key={mentor.id} className="rounded-lg border border-white/[0.06] bg-white/[0.03] p-3 text-xs">
+                              <p className="font-semibold text-foreground">{mentor.name}</p>
+                              <p className="text-muted-foreground">{mentor.email}</p>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-semibold text-foreground">Projects</h3>
+                      <div className="max-h-72 space-y-2 overflow-y-auto rounded-xl border border-white/[0.06] bg-black/20 p-3">
+                        {selectedBatchDetails.projects.length === 0 ? (
+                          <p className="text-xs text-muted-foreground">No projects stored for this batch.</p>
+                        ) : (
+                          selectedBatchDetails.projects.map((project) => (
+                            <div key={project.id} className="rounded-lg border border-white/[0.06] bg-white/[0.03] p-3 text-xs">
+                              <p className="font-semibold text-foreground">{project.title}</p>
+                              {project.mentor && <p className="text-muted-foreground">{project.mentor.name}</p>}
+                              {project.abstract && <p className="mt-1 line-clamp-3 text-muted-foreground">{project.abstract}</p>}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
               </div>
             )}
 
@@ -840,6 +1027,72 @@ export default function App() {
                 )}
               </CardContent>
             </div>
+
+            {batchInfo && (
+              <div className="glass-card overflow-hidden">
+                <div className="h-1 bg-gradient-to-r from-cyan-500 to-emerald-500" />
+                <CardHeader>
+                  <CardTitle className="text-base">Imported records</CardTitle>
+                  <CardDescription>
+                    These are the students, mentors, and projects persisted from the uploaded workbook.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <Meta label="Students" value={String(batchInfo.candidates.length)} />
+                    <Meta label="Mentors" value={String(batchInfo.mentors.length)} />
+                    <Meta label="Projects" value={String(batchInfo.projects.length)} />
+                  </div>
+                  <div className="grid gap-5 lg:grid-cols-3">
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-semibold text-foreground">Students</h3>
+                      <div className="max-h-72 space-y-2 overflow-y-auto rounded-xl border border-white/[0.06] bg-black/20 p-3">
+                        {batchInfo.candidates.length === 0 ? (
+                          <p className="text-xs text-muted-foreground">No students were persisted from this upload.</p>
+                        ) : (
+                          batchInfo.candidates.map((candidate) => (
+                            <div key={candidate.id} className="rounded-lg border border-white/[0.06] bg-white/[0.03] p-3 text-xs">
+                              <p className="font-semibold text-foreground">{candidate.name}</p>
+                              <p className="text-muted-foreground">{candidate.registration_number}</p>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-semibold text-foreground">Mentors</h3>
+                      <div className="max-h-72 space-y-2 overflow-y-auto rounded-xl border border-white/[0.06] bg-black/20 p-3">
+                        {batchInfo.mentors.length === 0 ? (
+                          <p className="text-xs text-muted-foreground">No mentors were persisted from this upload.</p>
+                        ) : (
+                          batchInfo.mentors.map((mentor) => (
+                            <div key={mentor.id} className="rounded-lg border border-white/[0.06] bg-white/[0.03] p-3 text-xs">
+                              <p className="font-semibold text-foreground">{mentor.name}</p>
+                              <p className="text-muted-foreground">{mentor.email}</p>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-semibold text-foreground">Projects</h3>
+                      <div className="max-h-72 space-y-2 overflow-y-auto rounded-xl border border-white/[0.06] bg-black/20 p-3">
+                        {batchInfo.projects.length === 0 ? (
+                          <p className="text-xs text-muted-foreground">No projects were persisted from this upload.</p>
+                        ) : (
+                          batchInfo.projects.map((project) => (
+                            <div key={project.id} className="rounded-lg border border-white/[0.06] bg-white/[0.03] p-3 text-xs">
+                              <p className="font-semibold text-foreground">{project.title}</p>
+                              {project.mentor && <p className="text-muted-foreground">{project.mentor.name}</p>}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </div>
+            )}
 
             {batchInfo && (
               <div className="glass-card overflow-hidden">

@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -15,8 +15,18 @@ if TYPE_CHECKING:
     from app.features.shared.models import Skill
 
 
+from sqlalchemy.dialects.postgresql import JSONB
+
+
 class Project(Base):
     __tablename__ = "projects"
+    __table_args__ = (
+        UniqueConstraint(
+            "import_batch_id",
+            "title",
+            name="uq_projects_import_batch_title",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     import_batch_id: Mapped[int | None] = mapped_column(
@@ -28,8 +38,12 @@ class Project(Base):
         nullable=False,
         unique=True,
     )
-    title: Mapped[str] = mapped_column(String(512), nullable=False, unique=True)
+    title: Mapped[str] = mapped_column(String(512), nullable=False)
     abstract: Mapped[str | None] = mapped_column(Text, nullable=True)
+    problem_statement_link: Mapped[str | None] = mapped_column(
+        String(1024), nullable=True
+    )
+    extracted_requirements: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -38,6 +52,7 @@ class Project(Base):
     )
 
     mentor: Mapped[Mentor] = relationship(back_populates="project")
+
     prerequisites: Mapped[list[ProjectPrerequisite]] = relationship(
         back_populates="project", cascade="all, delete-orphan"
     )

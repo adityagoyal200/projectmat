@@ -11,6 +11,7 @@ from app.features.imports.schemas import (
     ImportBatchSummary,
 )
 from app.features.imports.service import ImportBatchNotFoundError, WorkbookImportService
+from app.features.mentors.models import Mentor
 from app.features.projects.models import Project
 
 router = APIRouter(prefix="/api/import-batches", tags=["Import Batches"])
@@ -39,6 +40,13 @@ async def list_import_batches(
     )
     proj_counts = {row.import_batch_id: row.cnt for row in proj_counts_res}
 
+    mentor_counts_res = await db.execute(
+        select(Mentor.import_batch_id, func.count(Mentor.id).label("cnt")).group_by(
+            Mentor.import_batch_id
+        )
+    )
+    mentor_counts = {row.import_batch_id: row.cnt for row in mentor_counts_res}
+
     return [
         ImportBatchListItem(
             id=b.id,
@@ -46,6 +54,10 @@ async def list_import_batches(
             created_at=b.created_at.isoformat(),
             candidate_count=cand_counts.get(b.id, 0),
             project_count=proj_counts.get(b.id, 0),
+            mentor_count=mentor_counts.get(b.id, 0),
+            total_candidates=b.total_candidates,
+            completed_candidates=b.completed_candidates,
+            cancellation_flag=b.cancellation_flag,
         )
         for b in batches
     ]
@@ -58,6 +70,18 @@ async def create_import_batch(
     """Create an empty import batch for workbook and resume files."""
     service = WorkbookImportService(db)
     return await service.create_batch()
+
+
+@router.get("/{batch_id}", response_model=ImportBatchResponse)
+async def get_import_batch(
+    batch_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> ImportBatchResponse:
+    service = WorkbookImportService(db)
+    try:
+        return await service.get_batch_details(batch_id)
+    except ImportBatchNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.post("/{batch_id}/files", response_model=ImportBatchResponse, status_code=200)

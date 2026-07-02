@@ -39,7 +39,7 @@ def _parse_llm_json(response: LLMCompletionResult) -> dict:
             response.skip_reason or "LLM evaluation was skipped.",
             raw_response=response.content or None,
         )
-    if response.error:
+    if response.error is not None:
         raise LlmEvaluationError(
             f"LLM provider error: {response.error}",
             raw_response=response.content or None,
@@ -133,6 +133,11 @@ SCORING RULES:
 - semantic_fit_score: holistic conceptual alignment with abstract and goals (0.0-1.0)
 - Score growth_potential_score HIGHER than readiness_score when missing
   prereqs are learnable from adjacent skills
+
+GUIDELINES FOR GENERATING PARAGRAPHS:
+- The "technical_readiness" paragraph MUST explicitly base its analysis on and cite the candidate's developer profile metrics (such as github_score, repository_quality_score, live_app_score, and any specific repository findings) provided in the PRELIMINARY SIGNALS.
+- The "growth_potential" paragraph MUST explicitly base its learnability/potential discussion on their coding_profiles_score (from competitive programming platforms like LeetCode/Codeforces) and achievements_score.
+- The "interest_alignment" paragraph MUST reflect their actual project history, GitHub repositories, and preferences.
 
 Respond ONLY with valid JSON (no markdown):
 {{

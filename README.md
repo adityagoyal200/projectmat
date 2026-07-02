@@ -17,7 +17,8 @@ In scope for the next phases:
 - Validate messy rows and show actionable issues.
 - Normalize students, mentors, projects, skills, and prerequisites.
 - Run explicit match jobs.
-- Show ranked matches by mentor/project with score breakdowns and explanations.
+- Perform static repository scanning, sandboxed test execution, and autonomous live application crawls.
+- Show ranked matches by mentor/project with detailed composite scoring breakdowns (including developer profile and code quality metrics) and qualitative explanations.
 - Export results as JSON and XLSX.
 
 Deferred:
@@ -91,6 +92,8 @@ http://localhost:8000/api/health
 
 ### 4. Frontend
 
+The frontend uses the backend target from the root `.env` through `BACKEND_PORT`, or from `frontend/.env` via `VITE_API_URL` if you want to override it explicitly.
+
 ```bash
 cd frontend
 npm install
@@ -136,6 +139,7 @@ Start here before implementing any phase:
 - `specs/roadmap.md`
 - `specs/adrs/ADR-0001-standalone-bulk-intake-matching-mvp.md`
 - `specs/features/2026-06-26-bulk-intake-and-matching/requirements.md`
+- `specs/features/2026-06-30-repository-and-live-app-evaluation/requirements.md`
 - `specs/apis/bulk-intake-and-matching-api.md`
 
 Architecture changes require an ADR before production code.

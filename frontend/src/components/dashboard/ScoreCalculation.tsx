@@ -4,21 +4,23 @@ import { cn } from '@/lib/utils';
 import type { ScoreBreakdown, ScoreComponents } from '@/types/api';
 
 const FACTOR_LABELS: Record<string, string> = {
+  llm_fit: 'LLM fit score',
   embedding_similarity: 'Embedding similarity',
-  readiness: 'Readiness',
-  growth_potential: 'Growth potential',
-  interest: 'Interest alignment',
   prerequisite_overlap: 'Prerequisite overlap',
   resume_experience: 'Resume experience',
+  github: 'GitHub profile',
+  coding_profiles: 'Coding profiles',
+  achievements: 'Achievements',
 };
 
 const FACTOR_ORDER = [
-  'growth_potential',
-  'readiness',
+  'llm_fit',
   'embedding_similarity',
   'prerequisite_overlap',
-  'interest',
   'resume_experience',
+  'github',
+  'coding_profiles',
+  'achievements',
 ] as const;
 
 function pct(value: number, digits = 1): string {
@@ -37,12 +39,13 @@ interface ScoreCalculationProps {
 
 export function ScoreCalculation({ finalScore, components, breakdown }: ScoreCalculationProps) {
   const componentScores: Record<string, number> = {
+    llm_fit: components.llm_fit_score,
     embedding_similarity: components.embedding_similarity,
-    readiness: components.readiness,
-    growth_potential: components.growth_potential,
-    interest: components.interest,
     prerequisite_overlap: components.prerequisite_overlap,
     resume_experience: components.resume_experience,
+    github: components.github_score,
+    coding_profiles: components.coding_profiles_score,
+    achievements: components.achievements_score,
   };
 
   const rows = FACTOR_ORDER.map((key) => ({

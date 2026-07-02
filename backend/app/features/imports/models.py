@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -18,8 +18,15 @@ class ImportBatch(Base):
     __tablename__ = "import_batches"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    status: Mapped[str] = mapped_column(String(50), nullable=False, default="created")
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="Pending")
     resumes_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    total_candidates: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    completed_candidates: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+    cancellation_flag: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

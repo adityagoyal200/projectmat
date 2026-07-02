@@ -10,7 +10,13 @@ from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.features.candidates.models import Candidate, CandidateSkill
+from app.features.evaluations.codeforces_client import fetch_codeforces_metrics
+from app.features.evaluations.github_client import fetch_github_user_metrics
+from app.features.evaluations.kaggle_client import fetch_kaggle_metrics
+from app.features.evaluations.leetcode_client import fetch_leetcode_metrics
+from app.features.evaluations.scholar_client import fetch_scholar_metrics
 from app.features.imports.drive_downloader import parse_pdf_bytes
+from app.features.imports.profile_parser import parse_username
 from app.features.matching.embeddings import (
     build_candidate_profile_text,
     build_project_profile_text,
@@ -35,10 +41,12 @@ from app.features.matching.schemas import (
     StudentRecommendationsResponse,
 )
 from app.features.matching.scoring import (
+    DeveloperProfileScoreResult,
     LlmScoreComponents,
     PreferenceSignalResult,
     PrerequisiteOverlapResult,
     ResumeExperienceResult,
+    compute_developer_profile_score,
     compute_hybrid_final_score,
     compute_preference_signal,
     compute_preliminary_score,
@@ -49,6 +57,24 @@ from app.features.projects.models import Project, ProjectPrerequisite
 from app.features.shared.models import Skill
 
 logger = structlog.get_logger()
+
+
+async def _safe_fetch_profile_metrics(fetcher, identifier: str | None) -> dict | None:
+    if not identifier:
+        return None
+    normalized = identifier.strip().strip("`").strip()
+    if not normalized:
+        return None
+    try:
+        return await fetcher(normalized)
+    except Exception as exc:
+        logger.warning(
+            "matching.profile_fetch_failed",
+            fetcher=getattr(fetcher, "__name__", "unknown"),
+            identifier=normalized,
+            error=str(exc),
+        )
+        return {"fetch_error": str(type(exc).__name__)}
 
 
 @dataclass
@@ -107,6 +133,7 @@ class MatchService:
         resume_text: str,
         registration_number: str,
         project,
+        developer_profile: DeveloperProfileScoreResult | None = None,
     ) -> _PairSignals:
         prereqs = [p.skill.name for p in project.prerequisites if p.skill]
         project_abstract = cast(str, project.abstract or "")
@@ -131,6 +158,7 @@ class MatchService:
             embedding_similarity=emb_sim,
             prerequisite_overlap=prereq_overlap,
             resume_experience=resume_experience,
+            developer_profile=developer_profile,
         )
 
         return _PairSignals(
@@ -157,6 +185,7 @@ class MatchService:
         project,
         signals: _PairSignals,
         eval_res: dict | None,
+        developer_profile: DeveloperProfileScoreResult | None = None,
     ) -> ProjectMatchRecommendation:
         llm_scores = None
         if eval_res:
@@ -172,6 +201,7 @@ class MatchService:
             embedding_detail=signals.embedding_detail,
             prerequisite_overlap=signals.prereq_overlap,
             resume_experience=signals.resume_experience,
+            developer_profile=developer_profile,
             preference_signal=signals.preference_signal,
             llm_scores=llm_scores,
         )
@@ -211,6 +241,12 @@ class MatchService:
                 readiness=hybrid.readiness,
                 growth_potential=hybrid.growth_potential,
                 interest=hybrid.interest,
+                github_score=hybrid.github_score,
+                coding_profiles_score=hybrid.coding_profiles_score,
+                achievements_score=hybrid.achievements_score,
+                repository_quality_score=hybrid.repository_quality_score,
+                live_app_score=hybrid.live_app_score,
+                llm_fit_score=hybrid.llm_fit_score,
                 prerequisite_overlap=hybrid.prerequisite_overlap,
                 resume_experience=hybrid.resume_experience,
                 preference_signal=hybrid.preference_signal,
@@ -224,6 +260,7 @@ class MatchService:
                 weighted_contributions=hybrid.weighted_contributions,
                 prerequisite_detail=hybrid.prerequisite_detail,
                 resume_experience_detail=hybrid.resume_experience_detail,
+                developer_profile_detail=hybrid.developer_profile_detail,
                 preference_detail=hybrid.preference_detail,
                 embedding_detail=hybrid.embedding_detail,
                 llm_scoring_rationale=rationale,
@@ -254,11 +291,25 @@ class MatchService:
                 semantic_fit=eval_res["semantic_fit"],
             )
 
+        developer_profile = compute_developer_profile_score(
+            github_username=candidate.github_username,
+            github_metrics=candidate.github_metrics,
+            github_repositories=candidate.github_repositories,
+            leetcode_metrics=candidate.leetcode_metrics,
+            codeforces_metrics=candidate.codeforces_metrics,
+            kaggle_metrics=candidate.kaggle_metrics,
+            scholar_metrics=candidate.scholar_metrics,
+            achievements=candidate.achievements,
+            repository_evaluations=candidate.repository_evaluations,
+            live_app_evaluations=candidate.live_app_evaluations,
+        )
+
         hybrid = compute_hybrid_final_score(
             embedding_similarity=signals.embedding_sim,
             embedding_detail=signals.embedding_detail,
             prerequisite_overlap=signals.prereq_overlap,
             resume_experience=signals.resume_experience,
+            developer_profile=developer_profile,
             preference_signal=signals.preference_signal,
             llm_scores=llm_scores,
         )
@@ -296,6 +347,12 @@ class MatchService:
                 readiness=hybrid.readiness,
                 growth_potential=hybrid.growth_potential,
                 interest=hybrid.interest,
+                github_score=hybrid.github_score,
+                coding_profiles_score=hybrid.coding_profiles_score,
+                achievements_score=hybrid.achievements_score,
+                repository_quality_score=hybrid.repository_quality_score,
+                live_app_score=hybrid.live_app_score,
+                llm_fit_score=hybrid.llm_fit_score,
                 prerequisite_overlap=hybrid.prerequisite_overlap,
                 resume_experience=hybrid.resume_experience,
                 preference_signal=hybrid.preference_signal,
@@ -309,6 +366,7 @@ class MatchService:
                 weighted_contributions=hybrid.weighted_contributions,
                 prerequisite_detail=hybrid.prerequisite_detail,
                 resume_experience_detail=hybrid.resume_experience_detail,
+                developer_profile_detail=hybrid.developer_profile_detail,
                 preference_detail=hybrid.preference_detail,
                 embedding_detail=hybrid.embedding_detail,
                 llm_scoring_rationale=rationale,
@@ -335,6 +393,8 @@ class MatchService:
             .options(
                 selectinload(Candidate.skills).selectinload(CandidateSkill.skill),
                 selectinload(Candidate.documents),
+                selectinload(Candidate.repository_evaluations),
+                selectinload(Candidate.live_app_evaluations),
             )
             .where(Candidate.registration_number == registration_number)
         )
@@ -354,6 +414,19 @@ class MatchService:
         resume_skills = self._extract_skills_from_resume(resume_text, known_skills)
         candidate_skills = self._merge_skills(workbook_skills, resume_skills)
 
+        developer_profile = compute_developer_profile_score(
+            github_username=candidate.github_username,
+            github_metrics=candidate.github_metrics,
+            github_repositories=candidate.github_repositories,
+            leetcode_metrics=candidate.leetcode_metrics,
+            codeforces_metrics=candidate.codeforces_metrics,
+            kaggle_metrics=candidate.kaggle_metrics,
+            scholar_metrics=candidate.scholar_metrics,
+            achievements=candidate.achievements,
+            repository_evaluations=candidate.repository_evaluations,
+            live_app_evaluations=candidate.live_app_evaluations,
+        )
+
         stmt = select(Project).options(
             selectinload(Project.mentor),
             selectinload(Project.prerequisites).selectinload(ProjectPrerequisite.skill),
@@ -371,6 +444,7 @@ class MatchService:
                 resume_text=resume_text,
                 registration_number=registration_number,
                 project=project,
+                developer_profile=developer_profile,
             )
             staged.append((project, signals))
 
@@ -400,6 +474,7 @@ class MatchService:
                     project=project,
                     signals=signals,
                     eval_res=eval_res,
+                    developer_profile=developer_profile,
                 )
             )
 
@@ -414,7 +489,15 @@ class MatchService:
         )
 
     async def recommend_projects_for_student(
-        self, resume_bytes: bytes, preferred_topics: list[str]
+        self,
+        resume_bytes: bytes,
+        preferred_topics: list[str],
+        github_url: str | None = None,
+        leetcode_url: str | None = None,
+        codeforces_url: str | None = None,
+        kaggle_url: str | None = None,
+        scholar_url: str | None = None,
+        live_app_url: str | None = None,  # noqa: ARG002
     ) -> StudentRecommendationsResponse:
         self._ensure_llm_ready()
 
@@ -425,6 +508,69 @@ class MatchService:
         for topic in preferred_topics:
             if topic and topic not in candidate_skills:
                 candidate_skills.append(topic)
+
+        github_user = parse_username(github_url, "github.com") if github_url else None
+        leetcode_user = (
+            parse_username(leetcode_url, "leetcode.com") if leetcode_url else None
+        )
+        codeforces_user = (
+            parse_username(codeforces_url, "codeforces.com") if codeforces_url else None
+        )
+        kaggle_user = parse_username(kaggle_url, "kaggle.com") if kaggle_url else None
+        scholar_user = None
+        if scholar_url:
+            match = re.search(
+                r"user=([A-Za-z0-9_\-]{8,20})", scholar_url, re.IGNORECASE
+            )
+            if match:
+                scholar_user = match.group(1)
+            else:
+                scholar_user = parse_username(scholar_url, "scholar.google.com")
+
+        github_metrics = (
+            await _safe_fetch_profile_metrics(fetch_github_user_metrics, github_user)
+            if github_user
+            else None
+        )
+        leetcode_metrics = (
+            await _safe_fetch_profile_metrics(fetch_leetcode_metrics, leetcode_user)
+            if leetcode_user
+            else None
+        )
+        codeforces_metrics = (
+            await _safe_fetch_profile_metrics(fetch_codeforces_metrics, codeforces_user)
+            if codeforces_user
+            else None
+        )
+        kaggle_metrics = (
+            await _safe_fetch_profile_metrics(fetch_kaggle_metrics, kaggle_user)
+            if kaggle_user
+            else None
+        )
+        scholar_metrics = (
+            await _safe_fetch_profile_metrics(fetch_scholar_metrics, scholar_user)
+            if scholar_user
+            else None
+        )
+
+        github_repos = []
+        if github_url and "/github.com/" in github_url.lower():
+            parts = github_url.rstrip("/").split("github.com/")
+            if len(parts) > 1 and len(parts[1].split("/")) >= 2:
+                github_repos.append(github_url)
+
+        developer_profile = compute_developer_profile_score(
+            github_username=github_user,
+            github_metrics=github_metrics,
+            github_repositories=github_repos,
+            leetcode_metrics=leetcode_metrics,
+            codeforces_metrics=codeforces_metrics,
+            kaggle_metrics=kaggle_metrics,
+            scholar_metrics=scholar_metrics,
+            achievements=[],
+            repository_evaluations=[],
+            live_app_evaluations=[],
+        )
 
         stmt = select(Project).options(
             selectinload(Project.mentor),
@@ -442,6 +588,7 @@ class MatchService:
                 resume_text=resume_text,
                 registration_number="",
                 project=project,
+                developer_profile=developer_profile,
             )
             staged.append((project, signals))
 
@@ -470,6 +617,7 @@ class MatchService:
                     project=project,
                     signals=signals,
                     eval_res=eval_res,
+                    developer_profile=developer_profile,
                 )
             )
 
@@ -509,6 +657,8 @@ class MatchService:
         stmt = select(Candidate).options(
             selectinload(Candidate.skills).selectinload(CandidateSkill.skill),
             selectinload(Candidate.documents),
+            selectinload(Candidate.repository_evaluations),
+            selectinload(Candidate.live_app_evaluations),
         )
         res = await self.db.execute(stmt)
         candidates = res.scalars().all()
@@ -523,12 +673,26 @@ class MatchService:
             resume_skills = self._extract_skills_from_resume(resume_text, known_skills)
             candidate_skills = self._merge_skills(workbook_skills, resume_skills)
 
+            developer_profile = compute_developer_profile_score(
+                github_username=candidate.github_username,
+                github_metrics=candidate.github_metrics,
+                github_repositories=candidate.github_repositories,
+                leetcode_metrics=candidate.leetcode_metrics,
+                codeforces_metrics=candidate.codeforces_metrics,
+                kaggle_metrics=candidate.kaggle_metrics,
+                scholar_metrics=candidate.scholar_metrics,
+                achievements=candidate.achievements,
+                repository_evaluations=candidate.repository_evaluations,
+                live_app_evaluations=candidate.live_app_evaluations,
+            )
+
             signals = await self._compute_pair_signals(
                 candidate_name=cast(str, candidate.name),
                 candidate_skills=candidate_skills,
                 resume_text=resume_text,
                 registration_number=cast(str, candidate.registration_number),
                 project=project,
+                developer_profile=developer_profile,
             )
             staged.append((candidate, signals, candidate_skills, resume_text))
 
@@ -587,6 +751,8 @@ class MatchService:
             .options(
                 selectinload(Candidate.skills).selectinload(CandidateSkill.skill),
                 selectinload(Candidate.documents),
+                selectinload(Candidate.repository_evaluations),
+                selectinload(Candidate.live_app_evaluations),
             )
             .where(Candidate.import_batch_id == batch_id)
         )
@@ -667,6 +833,11 @@ class MatchService:
                     prerequisite_overlap=row.prerequisite_overlap,
                     resume_experience=row.resume_experience,
                     preference_signal=row.preference_signal,
+                    github_score=row.github_score,
+                    coding_profiles_score=row.coding_profiles_score,
+                    achievements_score=row.achievements_score,
+                    repository_quality_score=row.repository_quality_score,
+                    live_app_score=row.live_app_score,
                     preliminary_score=row.preliminary_score,
                 )
                 for row in cached_rows
@@ -697,6 +868,19 @@ class MatchService:
             resume_skills = self._extract_skills_from_resume(resume_text, known_skills)
             candidate_skills = self._merge_skills(workbook_skills, resume_skills)
 
+            developer_profile = compute_developer_profile_score(
+                github_username=candidate.github_username,
+                github_metrics=candidate.github_metrics,
+                github_repositories=candidate.github_repositories,
+                leetcode_metrics=candidate.leetcode_metrics,
+                codeforces_metrics=candidate.codeforces_metrics,
+                kaggle_metrics=candidate.kaggle_metrics,
+                scholar_metrics=candidate.scholar_metrics,
+                achievements=candidate.achievements,
+                repository_evaluations=candidate.repository_evaluations,
+                live_app_evaluations=candidate.live_app_evaluations,
+            )
+
             for project in projects:
                 signals = await self._compute_pair_signals(
                     candidate_name=cast(str, candidate.name),
@@ -704,6 +888,7 @@ class MatchService:
                     resume_text=resume_text,
                     registration_number=cast(str, candidate.registration_number),
                     project=project,
+                    developer_profile=developer_profile,
                 )
                 score = PairScore(
                     candidate_id=cast(int, candidate.id),
@@ -712,6 +897,15 @@ class MatchService:
                     prerequisite_overlap=round(signals.prereq_overlap.score, 4),
                     resume_experience=round(signals.resume_experience.score, 4),
                     preference_signal=round(signals.preference_signal.score, 4),
+                    github_score=round(developer_profile.github_score, 4),
+                    coding_profiles_score=round(
+                        developer_profile.coding_profiles_score, 4
+                    ),
+                    achievements_score=round(developer_profile.achievements_score, 4),
+                    repository_quality_score=round(
+                        developer_profile.repository_quality_score, 4
+                    ),
+                    live_app_score=round(developer_profile.live_app_score, 4),
                     preliminary_score=round(signals.preliminary_score, 4),
                 )
                 pair_scores.append(score)
@@ -724,6 +918,11 @@ class MatchService:
                         prerequisite_overlap=score.prerequisite_overlap,
                         resume_experience=score.resume_experience,
                         preference_signal=score.preference_signal,
+                        github_score=score.github_score,
+                        coding_profiles_score=score.coding_profiles_score,
+                        achievements_score=score.achievements_score,
+                        repository_quality_score=score.repository_quality_score,
+                        live_app_score=score.live_app_score,
                         preliminary_score=score.preliminary_score,
                     )
                 )

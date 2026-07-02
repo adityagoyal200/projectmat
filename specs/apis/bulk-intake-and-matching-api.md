@@ -15,6 +15,7 @@
 | Projects        | `/api/projects`       |
 | Mentors         | `/api/mentors`        |
 | Recommendations | `/api/matching`       |
+| Evaluations     | `/api/evaluations`    |
 
 ---
 
@@ -287,12 +288,20 @@ Auth: Not required in MVP. Caller: `student` or `operator`.
       "final_score": 0.87,
       "score_components": {
         "embedding_similarity": 0.82,
+        "readiness": 0.8,
+        "growth_potential": 0.75,
+        "interest": 0.85,
+        "github_score": 0.9,
+        "coding_profiles_score": 0.85,
+        "achievements_score": 0.7,
+        "repository_quality_score": 0.8,
+        "live_app_score": 0.9,
+        "llm_fit_score": 0.8,
         "prerequisite_overlap": 0.8,
         "resume_experience": 0.75,
-        "github_score": 0.9,
-        "coding_profile_score": 0.85,
-        "achievements_score": 0.7,
-        "llm_fit_score": 0.8
+        "preference_signal": 1.0,
+        "preliminary_score": 0.83,
+        "llm_evaluated": true
       },
       "explanation": "You are a strong fit for this project due to your background in Python, PyTorch, and Computer Vision."
     }
@@ -347,6 +356,110 @@ Auth: Not required in MVP. Caller: `operator`.
 
 ---
 
+## Evaluations Endpoints
+
+### `GET /api/evaluations/candidates/{candidate_id}`
+
+Summary: Fetch summary of candidate profiles and evaluations, including profile summary (GitHub, LeetCode, Codeforces, Kaggle, Scholar metrics, achievements, etc.) and lists of repository and live app evaluations.
+
+Auth: Not required in MVP. Caller: `operator`.
+
+### Response - `200 OK`
+
+```json
+{
+  "candidate_id": 1,
+  "candidate_name": "Agnivesh Chatterjee",
+  "registration_number": "MDS202504",
+  "profile": {
+    "github_username": "agnivesh",
+    "github_repositories": ["https://github.com/agnivesh/project1"],
+    "github_metrics": {
+      "public_repos": 15,
+      "followers": 10,
+      "total_stars": 25,
+      "pr_total_count": 5
+    },
+    "leetcode_username": "agnivesh_lc",
+    "leetcode_metrics": {
+      "total_solved": 120,
+      "easy_solved": 40,
+      "medium_solved": 70,
+      "hard_solved": 10
+    },
+    "codeforces_username": "agnivesh_cf",
+    "codeforces_metrics": {
+      "rating": 1450,
+      "max_rating": 1500
+    },
+    "achievements": {
+      "items": ["ICPC Regional Finalist"]
+    },
+    "live_project_links": ["https://project1.herokuapp.com"]
+  },
+  "repository_evaluations": [],
+  "live_app_evaluations": []
+}
+```
+
+---
+
+### `POST /api/evaluations/candidates/{candidate_id}/refresh`
+
+Summary: Trigger refresh of developer profile metrics and evaluate extracted GitHub and live app links.
+
+Auth: Not required in MVP. Caller: `operator`.
+
+### Query / Body Parameters
+
+| Parameter                   | Type | Required | Default | Description                                                  |
+| --------------------------- | ---- | -------- | ------- | ------------------------------------------------------------ |
+| `fetch_remote_profiles`     | bool | No       | `false` | Fetch public profile metrics where API credentials allow it. |
+| `evaluate_links`            | bool | No       | `true`  | Evaluate extracted GitHub repository and live app links.     |
+| `clone_remote_repositories` | bool | No       | `false` | Clone GitHub repositories before repository inspection.      |
+| `run_repository_tests`      | bool | No       | `false` | Run detected repository tests when a local checkout exists.  |
+
+---
+
+### `POST /api/evaluations/candidates/{candidate_id}/repositories`
+
+Summary: Manually trigger evaluation for a candidate's repository.
+
+Auth: Not required in MVP. Caller: `operator`.
+
+### Body Parameters
+
+| Parameter        | Type   | Required | Default | Description                                                       |
+| ---------------- | ------ | -------- | ------- | ----------------------------------------------------------------- |
+| `repository_url` | string | Yes      |         | The Git repository URL.                                           |
+| `local_path`     | string | No       | `null`  | Optional server-local checkout path for deterministic inspection. |
+| `clone_remote`   | bool   | No       | `false` | Clone a remote Git repository into a temporary directory.         |
+| `run_tests`      | bool   | No       | `false` | Run detected test commands after inspection.                      |
+
+---
+
+### `POST /api/evaluations/candidates/{candidate_id}/live-apps`
+
+Summary: Manually trigger a Playwright browser crawl for a candidate's live project URL.
+
+Auth: Not required in MVP. Caller: `operator`.
+
+### Body Parameters
+
+| Parameter | Type   | Required | Description                                   |
+| --------- | ------ | -------- | --------------------------------------------- |
+| `url`     | string | Yes      | Absolute HTTP(S) live URL of the application. |
+
+---
+
+### `POST /api/evaluations/batches/{batch_id}/refresh`
+
+Summary: Refresh evaluations for an entire workbook import batch.
+
+Auth: Not required in MVP. Caller: `operator`.
+
+---
+
 ## Deferred API Questions
 
 | Question                                                              | Required Before         | Status                                              |
@@ -357,4 +470,4 @@ Auth: Not required in MVP. Caller: `operator`.
 
 ---
 
-_API spec version 0.3 - updated for current deterministic matrix implementation._
+_API spec version 0.4 - updated for current evaluations and hybrid scoring implementation._

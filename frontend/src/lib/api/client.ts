@@ -1,7 +1,9 @@
 import axios, { AxiosError } from 'axios';
 
+const explicitApiUrl = import.meta.env.VITE_API_URL as string | undefined;
+
 const client = axios.create({
-  baseURL: (import.meta.env.VITE_API_URL as string) || '/api',
+  baseURL: explicitApiUrl || '/api',
   timeout: 600000,
   headers: {
     'Content-Type': 'application/json',

@@ -24,19 +24,30 @@ def _clean_header(header: str) -> str:
 # Map canonical header names to their expected variations in the workbook.
 HEADER_ALIASES = {
     # Students Info
-    "name": ["name"],
-    "registration number": ["registration number", "registration_number"],
-    "email": ["email", "email id"],
-    "phone": ["phone", "phone number"],
-    "file": ["file", "resume"],
+    "name": ["name", "student name"],
+    "registration number": [
+        "registration number",
+        "registration_number",
+        "registration no",
+        "registration no.",
+        "reg no",
+        "roll number",
+    ],
+    "email": ["email", "email id", "mail id"],
+    "phone": ["phone", "phone number", "contact", "contact number"],
+    "file": ["file", "resume", "resume file", "cv"],
     # Mentors info
-    "mentors": ["mentors", "mentor name"],
-    "email id": ["email", "email id"],
+    "mentors": ["mentors", "mentor name", "mentor", "faculty name"],
+    "email id": ["email", "email id", "mail id"],
     # Mentors-projects
-    "short profile of the mentor": ["short profile of the mentor", "mentor profile"],
-    "project title": ["project title"],
-    "project abstract": ["project abstract"],
-    "pre-requisites": ["pre-requisites", "prerequisites"],
+    "short profile of the mentor": [
+        "short profile of the mentor",
+        "mentor profile",
+        "short profile",
+    ],
+    "project title": ["project title", "title"],
+    "project abstract": ["project abstract", "abstract", "description"],
+    "pre-requisites": ["pre-requisites", "prerequisites", "pre requisites"],
     "student's preference - 1": ["student's preference - 1", "student preference 1"],
     "student's preference - 2": ["student's preference - 2", "student preference 2"],
     "student's preference - 3": ["student's preference - 3", "student preference 3"],
@@ -44,10 +55,25 @@ HEADER_ALIASES = {
         "selected students (to be filled by mentors)",
         "selected students",
     ],
+    "github username": ["github username", "github", "github profile"],
+    "leetcode username": ["leetcode username", "leetcode", "leetcode profile"],
+    "codeforces username": [
+        "codeforces username",
+        "codeforces",
+        "codeforces profile",
+    ],
+    "kaggle username": ["kaggle username", "kaggle", "kaggle profile"],
+    "scholar id": ["scholar id", "google scholar", "scholar profile"],
+    "live project links": [
+        "live project links",
+        "live projects",
+        "project links",
+        "portfolio links",
+    ],
     # Probable projects
-    "project idea": ["project idea"],
-    "author": ["author"],
-    "topic": ["topic"],
+    "project idea": ["project idea", "idea"],
+    "author": ["author", "submitted by"],
+    "topic": ["topic", "domain"],
 }
 
 # Define required and optional columns for each sheet.
@@ -249,6 +275,24 @@ def parse_workbook(file_content: bytes) -> ParsedWorkbook:
                 email = _get_val(row, col_map, "email")
                 phone = _get_val(row, col_map, "phone")
                 file = _get_val(row, col_map, "file")
+                github_username = _get_val(row, col_map, "github username") or _get_val(
+                    row, col_map, "github"
+                )
+                leetcode_username = _get_val(
+                    row, col_map, "leetcode username"
+                ) or _get_val(row, col_map, "leetcode")
+                codeforces_username = _get_val(
+                    row, col_map, "codeforces username"
+                ) or _get_val(row, col_map, "codeforces")
+                kaggle_username = _get_val(row, col_map, "kaggle username") or _get_val(
+                    row, col_map, "kaggle"
+                )
+                scholar_id = _get_val(row, col_map, "scholar id") or _get_val(
+                    row, col_map, "google scholar"
+                )
+                live_project_links = _get_val(
+                    row, col_map, "live project links"
+                ) or _get_val(row, col_map, "live projects")
 
                 raw_data = {
                     "name": name,
@@ -256,6 +300,12 @@ def parse_workbook(file_content: bytes) -> ParsedWorkbook:
                     "email": email,
                     "phone": phone,
                     "file": file,
+                    "github_username": github_username,
+                    "leetcode_username": leetcode_username,
+                    "codeforces_username": codeforces_username,
+                    "kaggle_username": kaggle_username,
+                    "scholar_id": scholar_id,
+                    "live_project_links": live_project_links,
                 }
 
                 if not name:

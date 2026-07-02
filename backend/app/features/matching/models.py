@@ -124,6 +124,17 @@ class BatchPairScore(Base):
     prerequisite_overlap: Mapped[float] = mapped_column(Float, nullable=False)
     resume_experience: Mapped[float] = mapped_column(Float, nullable=False)
     preference_signal: Mapped[float] = mapped_column(Float, nullable=False)
+    github_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    coding_profiles_score: Mapped[float] = mapped_column(
+        Float, nullable=False, default=0.0
+    )
+    achievements_score: Mapped[float] = mapped_column(
+        Float, nullable=False, default=0.0
+    )
+    repository_quality_score: Mapped[float] = mapped_column(
+        Float, nullable=False, default=0.0
+    )
+    live_app_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     preliminary_score: Mapped[float] = mapped_column(Float, nullable=False)
     computed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

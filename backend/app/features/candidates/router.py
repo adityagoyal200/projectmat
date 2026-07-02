@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.dependencies import get_db
 from app.features.candidates.models import Candidate, CandidateSkill
 from app.features.candidates.schemas import CandidateResponse
+from app.features.imports.models import ImportBatch
 
 router = APIRouter(prefix="/api/candidates", tags=["Candidates"])
 
@@ -19,6 +20,9 @@ async def list_candidates(
     stmt = select(Candidate).options(
         selectinload(Candidate.skills).selectinload(CandidateSkill.skill)
     )
+    if import_batch_id is None:
+        latest_res = await db.execute(select(func.max(ImportBatch.id)))
+        import_batch_id = latest_res.scalar_one_or_none()
     if import_batch_id is not None:
         stmt = stmt.where(Candidate.import_batch_id == import_batch_id)
 

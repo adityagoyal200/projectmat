@@ -13,12 +13,50 @@ export interface ValidationIssue {
   message: string;
 }
 
+export interface ImportBatchCandidateItem {
+  id: number;
+  import_batch_id?: number | null;
+  registration_number: string;
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  github_username?: string | null;
+  leetcode_username?: string | null;
+  codeforces_username?: string | null;
+  kaggle_username?: string | null;
+  scholar_id?: string | null;
+  live_project_links?: string[] | null;
+}
+
+export interface ImportBatchMentorItem {
+  id: number;
+  name: string;
+  email: string;
+  phone?: string | null;
+}
+
+export interface ImportBatchProjectItem {
+  id: number;
+  mentor_id: number;
+  title: string;
+  abstract?: string | null;
+  mentor?: {
+    id: number;
+    name: string;
+    email: string;
+    phone?: string | null;
+  } | null;
+}
+
 export interface ImportBatchResponse {
   id: number;
   status: string;
   can_proceed: boolean;
   sheet_summaries: Record<string, SheetSummary>;
   issues: ValidationIssue[];
+  candidates: ImportBatchCandidateItem[];
+  mentors: ImportBatchMentorItem[];
+  projects: ImportBatchProjectItem[];
 }
 
 export interface Candidate {
@@ -26,6 +64,13 @@ export interface Candidate {
   registration_number: string;
   name: string;
   email?: string;
+  github_username?: string | null;
+  github_repositories?: string[] | null;
+  leetcode_username?: string | null;
+  codeforces_username?: string | null;
+  kaggle_username?: string | null;
+  scholar_id?: string | null;
+  live_project_links?: string[] | null;
 }
 
 export interface Mentor {
@@ -55,6 +100,12 @@ export interface ScoreComponents {
   readiness: number;
   growth_potential: number;
   interest: number;
+  github_score: number;
+  coding_profiles_score: number;
+  achievements_score: number;
+  repository_quality_score: number;
+  live_app_score: number;
+  llm_fit_score: number;
   prerequisite_overlap: number;
   resume_experience: number;
   preference_signal: number;
@@ -69,6 +120,7 @@ export interface ScoreBreakdown {
   weighted_contributions: Record<string, number>;
   prerequisite_detail: string;
   resume_experience_detail: string;
+  developer_profile_detail: string;
   preference_detail: string;
   embedding_detail: string;
   llm_scoring_rationale: string;
@@ -141,6 +193,10 @@ export interface ImportBatchListItem {
   created_at: string;
   candidate_count: number;
   project_count: number;
+  mentor_count: number;
+  total_candidates?: number;
+  completed_candidates?: number;
+  cancellation_flag?: boolean;
 }
 
 export interface BatchStudentSummary {
@@ -163,6 +219,11 @@ export interface PairScore {
   prerequisite_overlap: number;
   resume_experience: number;
   preference_signal: number;
+  github_score: number;
+  coding_profiles_score: number;
+  achievements_score: number;
+  repository_quality_score: number;
+  live_app_score: number;
   preliminary_score: number;
 }
 

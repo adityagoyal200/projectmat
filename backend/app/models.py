@@ -9,6 +9,7 @@ from app.features.candidates.models import (
     CandidateEmbedding,
     CandidateSkill,
 )
+from app.features.evaluations.models import LiveAppEvaluation, RepositoryEvaluation
 from app.features.imports.models import ImportBatch, ImportFile, ImportValidationIssue
 from app.features.matching.models import (
     BatchPairScore,
@@ -45,6 +46,8 @@ __all__ = [
     "CandidateDocument",
     "CandidateSkill",
     "CandidateEmbedding",
+    "RepositoryEvaluation",
+    "LiveAppEvaluation",
     "MatchRun",
     "MatchResult",
     "MatchResultExplanation",

@@ -15,6 +15,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from app.config import settings
 from app.dependencies import get_db
 from app.features.candidates.router import router as candidates_router
+from app.features.evaluations.router import router as evaluations_router
 from app.features.imports.router import router as imports_router
 from app.features.matching.router import router as matching_router
 from app.features.mentors.router import router as mentors_router
@@ -37,6 +38,7 @@ if settings.ENV == "production":
 else:
     processors = [
         *shared_processors,
+        structlog.processors.dict_tracebacks,
         structlog.dev.ConsoleRenderer(colors=True),
     ]
 
@@ -58,7 +60,7 @@ app = FastAPI(
 # 3. CORS Configuration Middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=[settings.frontend_origin, "http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -134,6 +136,7 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
 # 6. API Routing and Health Check Endpoints
 app.include_router(imports_router)
 app.include_router(candidates_router)
+app.include_router(evaluations_router)
 app.include_router(mentors_router)
 app.include_router(projects_router)
 app.include_router(matching_router)

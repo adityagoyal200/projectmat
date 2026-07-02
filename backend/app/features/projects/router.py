@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.dependencies import get_db
+from app.features.imports.models import ImportBatch
 from app.features.projects.models import Project, ProjectPrerequisite
 from app.features.projects.schemas import ProjectResponse
 
@@ -21,6 +22,9 @@ async def list_projects(
         selectinload(Project.prerequisites).selectinload(ProjectPrerequisite.skill),
         selectinload(Project.preferences),
     )
+    if import_batch_id is None:
+        latest_res = await db.execute(select(func.max(ImportBatch.id)))
+        import_batch_id = latest_res.scalar_one_or_none()
     if import_batch_id is not None:
         stmt = stmt.where(Project.import_batch_id == import_batch_id)
 

@@ -10,6 +10,22 @@ class ScoreComponents(BaseModel):
         description="LLM growth/learnability score (0.0-1.0)"
     )
     interest: float = Field(description="LLM interest alignment (0.0-1.0)")
+    github_score: float = Field(description="GitHub/repo/live quality score (0.0-1.0)")
+    coding_profiles_score: float = Field(
+        description="LeetCode/Codeforces/Kaggle profile score (0.0-1.0)"
+    )
+    achievements_score: float = Field(
+        description="Academic and achievement score (0.0-1.0)"
+    )
+    repository_quality_score: float = Field(
+        description="Stored repository evaluation average (0.0-1.0)"
+    )
+    live_app_score: float = Field(
+        description="Stored live app evaluation average (0.0-1.0)"
+    )
+    llm_fit_score: float = Field(
+        description="Small qualitative LLM fit score (0.0-1.0)"
+    )
     prerequisite_overlap: float = Field(
         description="Tiered prerequisite overlap (0.0-1.0)"
     )
@@ -30,6 +46,7 @@ class ScoreBreakdown(BaseModel):
     weighted_contributions: dict[str, float]
     prerequisite_detail: str
     resume_experience_detail: str
+    developer_profile_detail: str
     preference_detail: str
     embedding_detail: str
     llm_scoring_rationale: str
@@ -75,12 +92,16 @@ class StudentRecommendationsResponse(BaseModel):
     candidate_name: str
     registration_number: str
     recommendations: list[ProjectMatchRecommendation]
+    refresh_queued: bool = False
+    cached: bool = False
 
 
 class ProjectRecommendationsResponse(BaseModel):
     project_id: int
     project_title: str
     recommendations: list[StudentMatchRecommendation]
+    refresh_queued: bool = False
+    cached: bool = False
 
 
 class LlmPreviewRequest(BaseModel):
@@ -136,6 +157,19 @@ class PairScore(BaseModel):
     resume_experience: float = Field(description="Resume experience depth (0.0-1.0)")
     preference_signal: float = Field(
         description="Workbook preference signal (informational)"
+    )
+    github_score: float = Field(default=0.0, description="GitHub score (0.0-1.0)")
+    coding_profiles_score: float = Field(
+        default=0.0, description="Coding profile score (0.0-1.0)"
+    )
+    achievements_score: float = Field(
+        default=0.0, description="Achievement score (0.0-1.0)"
+    )
+    repository_quality_score: float = Field(
+        default=0.0, description="Repository evaluation score (0.0-1.0)"
+    )
+    live_app_score: float = Field(
+        default=0.0, description="Live app evaluation score (0.0-1.0)"
     )
     preliminary_score: float = Field(
         description="Composite deterministic score (0.0-1.0)"

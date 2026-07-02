@@ -37,15 +37,15 @@ Post-MVP C - Portal and Integration Features
 
 ## Phase Summary
 
-| Phase   | Name                                         | Status      |
-| ------- | -------------------------------------------- | ----------- |
-| Phase 0 | Project Setup                                | Completed   |
-| Phase 1 | Data Model                                   | Completed   |
-| Phase 2 | Bulk Workbook Import                         | Completed   |
-| Phase 3 | In-Memory Ingest & Profile Normalization     | Completed   |
-| Phase 4 | Symmetrical Matching & Recommendation APIs   | Completed   |
-| Phase 5 | Cohort Match Run & Export                    | Completed   |
-| Phase 6 | Deterministic Profile & Code Quality scoring | In Progress |
+| Phase   | Name                                         | Status    |
+| ------- | -------------------------------------------- | --------- |
+| Phase 0 | Project Setup                                | Completed |
+| Phase 1 | Data Model                                   | Completed |
+| Phase 2 | Bulk Workbook Import                         | Completed |
+| Phase 3 | In-Memory Ingest & Profile Normalization     | Completed |
+| Phase 4 | Symmetrical Matching & Recommendation APIs   | Completed |
+| Phase 5 | Cohort Match Run & Export                    | Completed |
+| Phase 6 | Deterministic Profile & Code Quality scoring | Completed |
 
 | Post-MVP | Name                               | Status      |
 | -------- | ---------------------------------- | ----------- |
@@ -186,22 +186,26 @@ Completed.
 
 ### Goal
 
-Run explicit, cohort-wide deterministic matrix score generation and expose a BatchScoreMatrix UI, with export capabilities deferred.
+Run explicit, cohort-wide deterministic matrix score generation and expose an interactive BatchScoreMatrix UI.
 
 ### Status
 
-Completed (Matrix generation & UI), Exports Deferred.
+Completed.
 
 ### Deliverables
 
-- Batch Score Matrix execution endpoint (`GET /api/matching/batch-scores/{batch_id}`).
-- Deterministic result persistence (`batch_pair_scores` table).
-- BatchScoreMatrix UI component in frontend.
+- Batch Score Matrix list and detail endpoints (`GET /api/import-batches` and `GET /api/matching/batch-scores/{batch_id}`).
+- Deterministic database caching via `batch_pair_scores` table to avoid repeating score generation.
+- Interactive, responsive Student Tile Grid UI in the frontend:
+  - Big composite scores and progress bars color-coded by strength (strong/moderate/weak).
+  - All 4 sub-scores (Embed, Prereq, Resume, Pref) always visible side-by-side.
+  - Sorters (Best, Average, A-Z) and expandable project recommendations list.
+  - Automatic loading when any batch card is selected.
 
 ### Definition of Done
 
-- Batch score matrix is generated and cached deterministically without LLM.
-- Matrix UI renders heatmaps of student vs. project fit.
+- Batch score matrix is generated, persisted, and cached in the database without LLM call latency.
+- Matrix UI renders candidate tiles and color-coded score indicators.
 
 ### Dependencies
 
@@ -209,29 +213,86 @@ Completed (Matrix generation & UI), Exports Deferred.
 
 ---
 
-## Phase 6 - Deterministic Profile & Code Quality Scoring
+## Phase 6 - GitHub Repository & Live App Evaluation
 
 ### Goal
 
-Incorporate deterministic developer metrics (GitHub, LeetCode, Codeforces, Kaggle, Google Scholar) and achievements into the candidate scoring pipeline, reducing subjective LLM scoring to 5% and using the LLM for qualitative fit explanation synthesis. Check code quality of candidate repositories and ping live links for functionality via an automated Antigravity CLI module.
+Perform a comprehensive review of candidate projects through profile extraction, static repository analysis, optional isolated execution, live app testing, and browser-agent-style observation traces.
 
 ### Status
 
-In Progress.
+Completed.
 
 ### Deliverables
 
-- Profile parser to extract URL handles from candidate resumes.
-- Scraper/enrichment service supporting GitHub, LeetCode, Codeforces, and Scholar metrics, with mock fallbacks.
-- Antigravity CLI repository inspector checking code quality, readme/license hygiene, and live website status.
-- Final scoring weights update: GitHub (30%), LeetCode/Codeforces (20%), Scholar/Achievements (10%), LLM evaluation (5%), Embedding Similarity (10%), Prerequisite Overlap (15%), Resume Experience (10%).
+- Resume profile extraction for GitHub repositories, GitHub usernames, LeetCode, Codeforces, Kaggle, Google Scholar, live project links, and achievement lines.
+- Candidate persistence for developer profile handles, profile metrics, repository links, live app links, and achievements.
+- Repository and live app evaluation persistence with API endpoints under `/api/evaluations`.
+- Deterministic repository inspector for local checkouts and optional remote clone mode:
+  - Source structure and language counts.
+  - README, license, and dependency manifest checks.
+  - Automated test discovery with explicit opt-in execution.
+  - Secret-pattern scanning.
+  - Structured findings and execution logs.
+- Live app evaluator for HTTP reachability, status, latency, title, visible error text, loading-state signals, and Reason -> Act -> Observe traces.
+- Phase 6 deterministic score components integrated into recommendations and batch score caching:
+  - GitHub/repository/live quality: 30%.
+  - Coding profiles: 20%.
+  - Achievements and Scholar signals: 10%.
+  - LLM qualitative fit reduced to 5%.
+  - Embedding, prerequisite, and resume experience retained.
 
 ### Definition of Done
 
-- Resume parser correctly extracts social handles.
-- Social handle crawlers fetch stats and save to Postgres Candidate profiles.
-- Score components output deterministic metrics instead of subjective LLM metrics.
-- Symmetrical recommendations output valid explanation JSONs utilizing only qualitative synthesis.
+- Parsed resumes populate developer profile fields without storing raw PDF files.
+- Candidate and batch evaluation endpoints return persisted repository/live-app evaluations.
+- Matching recommendations and batch scores include Phase 6 deterministic components.
+- Repository test execution and remote cloning are explicit opt-in operations.
+- Backend tests, backend lint, and frontend build/lint checks pass.
+
+### Original Requirements
+
+1. **Repository Evaluation**
+   The platform performs a comprehensive review of the project's source code using a combination of static analysis, automated execution, and AI-based code understanding. It examines:
+
+   - Overall code structure, logic, and architectural design.
+   - Presence and execution of automated tests.
+   - Code quality, maintainability, and adherence to coding standards.
+   - Security practices, including detection of exposed secrets and poor git hygiene.
+   - Documentation quality, particularly the availability of a properly structured README.
+     To execute tests and analysis, the evaluator creates isolated environments, installs project dependencies automatically, and runs standard development tools.
+
+2. **Live Application Evaluation**
+   The deployed application is tested from an end-user perspective rather than solely through code inspection. The system verifies:
+
+   - Whether required UI components and features are present.
+   - Whether user interactions (clicks, form submissions, uploads, etc.) function correctly.
+   - Overall application stability, responsiveness, and ability to recover from hosting sleep states.
+   - Absence of persistent loading issues, crashes, or visible frontend errors.
+
+3. **Multimodal AI-Powered Testing**
+   Instead of relying on fragile HTML selectors or traditional web scrapers, the evaluator uses autonomous AI browser agents that can:
+
+   - Analyze both screenshots and accessibility data.
+   - Identify interface elements visually.
+   - Interact with applications through a reasoning-driven workflow.
+   - Continuously observe outcomes and adjust actions based on results.
+     This approach allows the system to behave similarly to a human QA tester while remaining resilient to frontend implementation changes.
+
+4. **Autonomous Browser Agent Workflow**
+   The browser agent operates using a Reason → Act → Observe loop:
+
+   - Understands the current screen.
+   - Decides the next interaction.
+   - Performs the action in a real browser.
+   - Observes the updated state.
+   - Repeats until the feature has been validated.
+
+5. **Dynamic Test Data Generation**
+   When applications require user inputs such as file uploads, the evaluator can automatically generate realistic mock files (e.g., PDFs) within a secure temporary environment and use them during testing.
+
+6. **Background Task Orchestration**
+   Resource-intensive operations such as repository cloning and security scanning are executed asynchronously through CLI-based task orchestration. This enables the evaluator to continue processing other checks efficiently while long-running tasks execute in the background.
 
 ### Dependencies
 

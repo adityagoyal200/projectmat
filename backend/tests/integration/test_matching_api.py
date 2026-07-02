@@ -25,8 +25,46 @@ async def test_get_project_recommendations_not_found(client: AsyncClient):
 )
 @patch("app.features.matching.service.parse_pdf_bytes")
 async def test_recommend_projects_for_new_student(
-    mock_parse, mock_gen, client: AsyncClient
+    mock_parse, mock_gen, client: AsyncClient, mock_db
 ):
+    from unittest.mock import MagicMock
+
+    from app.features.candidates.models import Candidate
+
+    # Create a dummy candidate to be returned by database queries
+    test_cand = Candidate(
+        id=1,
+        name="Applicant",
+        registration_number="temp-12345",
+        evaluation_status="Pending",
+        repository_evaluations=[],
+        live_app_evaluations=[],
+    )
+
+    async def fake_execute(stmt, *args, **kwargs):
+        stmt_str = str(stmt).lower()
+        mock_result = MagicMock()
+        if "candidates" in stmt_str:
+            mock_result.scalars.return_value.first.return_value = test_cand
+            mock_result.scalars.return_value.all.return_value = [test_cand]
+        elif "projects" in stmt_str:
+            mock_result.scalars.return_value.first.return_value = None
+            mock_result.scalars.return_value.all.return_value = []
+        else:
+            mock_result.scalars.return_value.first.return_value = None
+            mock_result.scalars.return_value.all.return_value = []
+        return mock_result
+
+    mock_db.execute.side_effect = fake_execute
+
+    # Mock db.refresh to set Completed status and avoid 60 second sleep loop
+    def fake_refresh(instance, *args, **kwargs):
+        instance.evaluation_status = "Completed"
+        instance.repository_evaluations = []
+        instance.live_app_evaluations = []
+
+    mock_db.refresh.side_effect = fake_refresh
+
     mock_parse.return_value = "Python machine learning resume text"
     mock_gen.return_value = LLMCompletionResult(
         content=(

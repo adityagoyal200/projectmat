@@ -82,6 +82,12 @@ async def get_student_recommendations(
 async def recommend_projects_for_new_student(
     file: UploadFile = File(...),
     preferred_topics: str | None = Form(None),
+    github_url: str | None = Form(None),
+    leetcode_url: str | None = Form(None),
+    codeforces_url: str | None = Form(None),
+    kaggle_url: str | None = Form(None),
+    scholar_url: str | None = Form(None),
+    live_app_url: str | None = Form(None),
     db: AsyncSession = Depends(get_db),
 ) -> StudentRecommendationsResponse:
     """Upload a candidate's resume and get on-the-fly ranked project recommendations."""
@@ -95,7 +101,16 @@ async def recommend_projects_for_new_student(
 
     service = MatchService(db)
     try:
-        return await service.recommend_projects_for_student(resume_bytes, topics)
+        return await service.recommend_projects_for_student(
+            resume_bytes=resume_bytes,
+            preferred_topics=topics,
+            github_url=github_url,
+            leetcode_url=leetcode_url,
+            codeforces_url=codeforces_url,
+            kaggle_url=kaggle_url,
+            scholar_url=scholar_url,
+            live_app_url=live_app_url,
+        )
     except MatchingUnavailableError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except LlmEvaluationError as exc:
