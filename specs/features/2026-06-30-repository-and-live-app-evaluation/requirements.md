@@ -120,16 +120,21 @@ Adds two new tables to record evaluations over time:
 
 ---
 
-## 6. Scoring Weights (SCORING_VERSION: 3.0.0)
+## 6. Scoring Weights (SCORING_VERSION: 3.1.0)
+
+> Source of truth: `backend/app/config.py`. Weights were retuned from the initial
+> v3.0.0 draft (which used Coding 20% / Resume 10% / Embedding 10% / Achievements 10%
+> / Prereq 15%) after GitHub/repository quality proved the stronger deterministic
+> signal. Current v3.1.0 weights below sum to 100%.
 
 | Score Component           | Weight | Source                        | Description                                                                                                                                       |
 | ------------------------- | ------ | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **GitHub Score**          | 30%    | `github_metrics` & Repo scans | Bounded counts for stars, followers, public PRs, OS contributions, repo count, static repo evaluation quality, and repository logic review.       |
-| **Coding Profiles Score** | 20%    | LeetCode & Codeforces         | Calculated from LeetCode solved problems (weighted by difficulty: Easy=1, Medium=2, Hard=3), contest count, Codeforces rating, and Kaggle medals. |
-| **Prerequisite Overlap**  | 15%    | Resume parsing vs Project     | Tiered overlap (Exact/Alias = 1.0, Adjacent/Family = 0.5, Gaps = 0.0).                                                                            |
-| **Resume Experience**     | 10%    | Resume vs Project abstract    | Depth of work, domain keywords, and project occurrences.                                                                                          |
-| **Embedding Similarity**  | 10%    | pgvector                      | Cosine distance similarity.                                                                                                                       |
-| **Achievements Score**    | 10%    | Resume achievements & Scholar | Citations, publications, h-index, and resume awards/ICPC heuristics.                                                                              |
+| **Prerequisite Overlap**  | 20%    | Resume parsing vs Project     | Tiered overlap (Exact/Alias = 1.0, Adjacent/Family = 0.5, Gaps = 0.0).                                                                            |
+| **Resume Experience**     | 20%    | Resume vs Project abstract    | Depth of work, domain keywords, and project occurrences.                                                                                          |
+| **Embedding Similarity**  | 15%    | pgvector                      | Cosine distance similarity.                                                                                                                       |
+| **Coding Profiles Score** | 5%     | LeetCode & Codeforces         | Calculated from LeetCode solved problems (weighted by difficulty: Easy=1, Medium=2, Hard=3), contest count, Codeforces rating, and Kaggle medals. |
+| **Achievements Score**    | 5%     | Resume achievements & Scholar | Citations, publications, h-index, and resume awards/ICPC heuristics.                                                                              |
 | **LLM Fit Score**         | 5%     | LLM review                    | Small qualitative fit score (0.0-1.0).                                                                                                            |
 
 ---

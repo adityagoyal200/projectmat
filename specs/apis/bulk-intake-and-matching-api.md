@@ -356,6 +356,37 @@ Auth: Not required in MVP. Caller: `operator`.
 
 ---
 
+### `GET /api/matching/report`
+
+Summary: Generate and download a print-ready PDF fit report for one candidate–project pair. Reuses the deterministic factor breakdown (scoring v3.1.0) and adds an LLM-generated readiness analysis (fit summary, in-depth assessment, strengths, gaps, improvement plan, learning roadmap, recommended resources, how-to-approach steps, and mentor risks).
+
+Auth: Not required in MVP. Caller: `operator`.
+
+### Query Parameters
+
+| Parameter             | Type   | Required | Description                                        |
+| --------------------- | ------ | -------- | -------------------------------------------------- |
+| `registration_number` | string | Yes      | Candidate registration number. `404` if not found. |
+| `project_id`          | int    | Yes      | Project id. `404` if not found.                    |
+
+### Response - `200 OK`
+
+- `Content-Type: application/pdf`
+- `Content-Disposition: attachment; filename="fit-report-{registration_number}-{project_id}.pdf"`
+- Body: PDF bytes (begins with `%PDF-`).
+
+### Errors
+
+| Status | When                                                                                              |
+| ------ | ------------------------------------------------------------------------------------------------- |
+| `404`  | Candidate or project not found.                                                                   |
+| `503`  | LLM not configured/ready (`MatchingUnavailableError`) or PDF render failed (`ReportRenderError`). |
+
+Note: if the LLM analysis call fails transiently, the endpoint still returns `200`
+with a factor-only PDF (deterministic skeleton) rather than erroring.
+
+---
+
 ## Evaluations Endpoints
 
 ### `GET /api/evaluations/candidates/{candidate_id}`

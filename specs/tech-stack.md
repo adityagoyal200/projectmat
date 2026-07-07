@@ -238,7 +238,7 @@ Initial providers:
 
 - Groq for development and hosted staging.
 - Ollama for self-hosted/local deployments where appropriate.
-- OpenAI can be added later behind the same interface.
+- Gemini and OpenAI are also supported behind the same interface.
 
 ### Centralized Generation Layer
 
@@ -287,12 +287,9 @@ MVP retrieval:
 
 ### Reranking
 
-Selected default: BGE cross-encoder reranker.
+Status: deferred. `match_results` reserves `reranker_version`/`reranker_score` columns for this, but no reranker is implemented — scoring currently combines embedding similarity, prerequisite overlap, resume evidence, and the developer-profile signals from `specs/adrs/ADR-0001-standalone-bulk-intake-matching-mvp.md` instead. Revisit if retrieval-pool precision becomes a measured bottleneck.
 
-Usage:
-
-- Rerank the retrieved candidate pool against the full project context.
-- Feed reranker score into hybrid scoring.
+Planned default if implemented: BGE cross-encoder reranker, reranking the retrieved candidate pool against the full project context and feeding a reranker score into the hybrid score.
 
 ---
 

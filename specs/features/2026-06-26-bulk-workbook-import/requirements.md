@@ -2,7 +2,7 @@
 
 ## Status
 
-`[ ] Draft` | `[ ] Review` | `[ ] Approved` | `[ ] In Progress` | `[ ] Done` | `[ ] Deferred`
+`[x] Done`
 
 ## Author
 

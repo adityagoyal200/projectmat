@@ -44,5 +44,5 @@
    - GitHub stars, followers, and public PR counts.
    - Codeforces ratings and LeetCode problem difficulty indexes.
    - Scholar citations and publication records.
-2. Update weights to assign 30% for GitHub/Repository, 20% for Coding Profiles, and 10% for Achievements/Scholar scores.
+2. Update weights to assign 30% for GitHub/Repository, 5% for Coding Profiles, and 5% for Achievements/Scholar scores (retuned from an earlier 20%/10% draft; embedding 15%, prerequisite 20%, resume experience 20%, LLM fit 5% — scoring v3.1.0 in `backend/app/config.py`).
 3. Cache these deterministic evaluations in `batch_pair_scores` matrix tables.

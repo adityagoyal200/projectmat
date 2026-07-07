@@ -1,5 +1,9 @@
 # Phase 1 Data Model - Requirements
 
+## Status
+
+`[x] Done`
+
 ## Scope
 
 Create the normalized relational schema required for import batches, canonical records, match runs, match results, and auditability.

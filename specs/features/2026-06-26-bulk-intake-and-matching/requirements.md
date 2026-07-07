@@ -6,7 +6,7 @@ Bulk Intake and Matching
 
 ## Status
 
-`[ ] Approved`
+`[x] Approved`
 
 ## Author
 
@@ -486,17 +486,17 @@ Summary:
 
 - [x] ADR-0001 is accepted.
 - [x] This feature spec is approved.
-- [ ] Input workbook contract is documented.
-- [ ] Data model migration applies and rolls back cleanly.
-- [ ] Import parser has fixture-based tests using representative workbook rows.
-- [ ] Validation issues are persisted with sheet and row context.
-- [ ] Candidate, mentor, project, and prerequisite normalization is tested.
-- [ ] Resume linking and parse failure behavior is tested.
-- [ ] Match runs persist status, configuration, results, and explanations.
-- [ ] JSON and XLSX result outputs are generated from persisted results.
-- [ ] Unit and integration tests pass.
-- [ ] No direct LLM calls exist outside `ai/generation/`.
-- [ ] No production code is implemented before architecture approval.
+- [x] Input workbook contract is documented.
+- [x] Data model migration applies and rolls back cleanly.
+- [x] Import parser has fixture-based tests using representative workbook rows.
+- [x] Validation issues are persisted with sheet and row context.
+- [x] Candidate, mentor, project, and prerequisite normalization is tested.
+- [x] Resume linking and parse failure behavior is tested.
+- [x] Match runs persist status, configuration, results, and explanations.
+- [x] JSON and XLSX result outputs are generated from persisted results.
+- [x] Unit and integration tests pass.
+- [x] No direct LLM calls exist outside `ai/generation/`.
+- [x] No production code is implemented before architecture approval.
 
 ---
 

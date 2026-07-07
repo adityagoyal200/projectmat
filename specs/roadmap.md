@@ -46,20 +46,7 @@ Post-MVP C - Portal and Integration Features
 | Phase 4 | Symmetrical Matching & Recommendation APIs   | Completed |
 | Phase 5 | Cohort Match Run & Export                    | Completed |
 | Phase 6 | Deterministic Profile & Code Quality scoring | Completed |
-
-| Post-MVP | Name                               | Status      |
-| -------- | ---------------------------------- | ----------- |
-| A1       | Complete Operator Review UI        | Not Started |
-| A2       | Operator Auth and Access Hardening | Not Started |
-| A3       | External Integration API           | Deferred    |
-| B1       | Reviewer Feedback Capture          | Not Started |
-| B2       | AI Evaluation Framework            | Not Started |
-| B3       | Scoring Calibration                | Not Started |
-| C1       | Student Experience                 | Deferred    |
-| C2       | Mentor Experience                  | Deferred    |
-| C3       | Notifications and Chat             | Deferred    |
-| C4       | Admin Panel                        | Deferred    |
-| C5       | Production Deployment Hardening    | Not Started |
+| Phase 7 | Candidate–Project Fit Report (PDF)           | Completed |
 
 ---
 
@@ -235,12 +222,13 @@ Completed.
   - Secret-pattern scanning.
   - Structured findings and execution logs.
 - Live app evaluator for HTTP reachability, status, latency, title, visible error text, loading-state signals, and Reason -> Act -> Observe traces.
-- Phase 6 deterministic score components integrated into recommendations and batch score caching:
+- Phase 6 deterministic score components integrated into recommendations and batch score caching (scoring v3.1.0 weights, per `backend/app/config.py`):
   - GitHub/repository/live quality: 30%.
-  - Coding profiles: 20%.
-  - Achievements and Scholar signals: 10%.
-  - LLM qualitative fit reduced to 5%.
-  - Embedding, prerequisite, and resume experience retained.
+  - Coding profiles: 5%.
+  - Achievements and Scholar signals: 5%.
+  - LLM qualitative fit: 5%.
+  - Embedding 15%, prerequisite 20%, and resume experience 20% retained.
+  - _Note: coding-profile and achievement weights were retuned down (from an earlier 20%/10% draft) to 5%/5% as GitHub/repository quality proved the stronger deterministic signal._
 
 ### Definition of Done
 
@@ -297,6 +285,48 @@ Completed.
 ### Dependencies
 
 - Phase 5
+
+---
+
+## Phase 7 - Candidate–Project Fit Report (PDF)
+
+### Goal
+
+Let an operator download a self-contained, print-ready PDF that explains why a specific
+candidate fits a specific project and how the candidate should close their gaps —
+combining the deterministic factor breakdown with an LLM-generated readiness analysis.
+
+### Status
+
+Completed.
+
+### Deliverables
+
+- `GET /api/matching/report?registration_number=&project_id=` streaming a PDF
+  (`application/pdf`, `Content-Disposition: attachment`).
+- `MatchService.build_match_report(...)` reusing the full scoring path for the factor
+  breakdown (scoring v3.1.0) plus one LLM analysis call.
+- `app/features/matching/report.py`: `generate_improvement_analysis` (structured JSON:
+  fit summary, in-depth assessment, strengths, gaps, improvement plan, learning roadmap,
+  recommended resources, project approach, mentor risks; deterministic-skeleton
+  fallback), `build_report_html` (Story-safe HTML), and `render_html_to_pdf`
+  (PyMuPDF `fitz.Story`, rendered off-thread; `ReportRenderError` on failure).
+- Frontend `lib/api/report.ts::downloadMatchReport` wired into `RecommendationCard`.
+- No new dependency (PyMuPDF already used for resume parsing) and no schema change
+  (the report is computed on the fly, nothing persisted).
+
+### Definition of Done
+
+- Endpoint returns a valid PDF for a real candidate–project pair (verified end-to-end).
+- LLM failure degrades to a deterministic factor-only PDF instead of a `500`.
+- OpenAPI docs expose the endpoint; backend/frontend lint clean.
+- _Open:_ automated unit/integration tests for the report are not yet written; the
+  analysis call has no retry (a transient LLM failure silently yields the empty
+  skeleton). See `specs/features/2026-07-03-candidate-project-fit-report/`.
+
+### Dependencies
+
+- Phase 4 (scoring path, LLM evaluation), Phase 6 (developer-profile factors).
 
 ---
 

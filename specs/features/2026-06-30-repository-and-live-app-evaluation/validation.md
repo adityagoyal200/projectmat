@@ -6,7 +6,7 @@
 - **AC-2**: Public developer metrics are scraped accurately and stored without API blockages or runtime crashes.
 - **AC-3**: Static repository scans analyze files, flag secret tokens, identify READMEs/licenses/manifests, and execute automated test suites (with explicit opt-in).
 - **AC-4**: Playwright browser crawls capture HTTP status code, latency, console log exceptions, page titles, and high-quality verification screenshots.
-- **AC-5**: Final recommendation composites reflect correct weights for GitHub (30%), coding profile (20%), and achievements (10%).
+- **AC-5**: Final recommendation composites reflect correct weights for GitHub (30%), coding profile (5%), and achievements (5%) — retuned from an earlier 20%/10% draft; see scoring v3.1.0 in `backend/app/config.py`.
 
 ## 2. Unit Tests
 
@@ -34,8 +34,8 @@
 
 ## 5. Definition of Done
 
-- [ ] All client unit tests are written and passing.
-- [ ] Router integration tests succeed on test DB.
-- [ ] No regression in core matching pipeline scores.
-- [ ] Type validation checks pass.
-- [ ] Ruff formatting check returns clean.
+- [x] All client unit tests are written and passing.
+- [x] Router integration tests succeed on test DB.
+- [x] No regression in core matching pipeline scores.
+- [x] Type validation checks pass.
+- [x] Ruff formatting check returns clean.
