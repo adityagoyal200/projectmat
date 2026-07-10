@@ -5,7 +5,7 @@ services:
     image: pgvector/pgvector:pg15
     container_name: projectmatchai-db
     ports:
-      - "5432:5432"
+      - "${DB_HOST_PORT:-5432}:5432"
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -22,9 +22,46 @@ services:
     image: ollama/ollama:latest
     container_name: projectmatchai-ollama
     ports:
-      - "11434:11434"
+      - "${OLLAMA_HOST_PORT:-11434}:11434"
     volumes:
       - ollama:/root/.ollama
+
+  backend:
+    build:
+      context: ./backend
+    container_name: projectmatchai-backend
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/projectmatchai
+      OLLAMA_BASE_URL: http://ollama:11434
+      EXTRA_CORS_ORIGINS: ${EXTRA_CORS_ORIGINS:-}
+    ports:
+      - "${BACKEND_HOST_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL}
+    container_name: projectmatchai-frontend
+    ports:
+      - "${FRONTEND_HOST_PORT:-5173}:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+networks:
+  default:
+    name: projectmatchai-net
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.77.0.0/16
 
 volumes:
   pgdata:

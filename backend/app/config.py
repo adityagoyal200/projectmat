@@ -77,11 +77,21 @@ class Settings(BaseSettings):
 
     FRONTEND_PORT: int = 5173
     BACKEND_PORT: int = 8000
+    # Comma-separated extra origins allowed to call the API (e.g. the VM's
+    # public IP/domain in a deployment where the frontend isn't on localhost).
+    EXTRA_CORS_ORIGINS: str = ""
 
     @computed_field
     @property
     def frontend_origin(self) -> str:
         return f"http://localhost:{self.FRONTEND_PORT}"
+
+    @computed_field
+    @property
+    def cors_origins(self) -> list[str]:
+        origins = [self.frontend_origin, "http://localhost:3000"]
+        origins += [o.strip() for o in self.EXTRA_CORS_ORIGINS.split(",") if o.strip()]
+        return origins
 
     @computed_field
     @property
