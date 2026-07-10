@@ -7,7 +7,8 @@ from datetime import UTC, datetime
 from typing import cast
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -197,28 +198,32 @@ class MatchService:
     async def _store_cached_recommendation(
         self, batch_id: int | None, cache_type: str, entity_key: str, payload: dict
     ) -> None:
-        """Upsert a recommendation payload for (batch, type, entity)."""
+        """Upsert a recommendation payload for (batch, type, entity).
+
+        Uses an atomic INSERT ... ON CONFLICT DO UPDATE keyed on the
+        uq_match_rec_cache unique constraint. A read-then-insert would race
+        when two matches for the same entity run concurrently (both read a
+        miss, both insert) — the loser hit a duplicate-key IntegrityError that
+        crashed the whole request after minutes of work.
+        """
         if batch_id is None:
             return
-        stmt = select(MatchRecommendationCache).where(
-            MatchRecommendationCache.batch_id == batch_id,
-            MatchRecommendationCache.cache_type == cache_type,
-            MatchRecommendationCache.entity_key == entity_key,
+        stmt = pg_insert(MatchRecommendationCache).values(
+            batch_id=batch_id,
+            cache_type=cache_type,
+            entity_key=entity_key,
+            scoring_version=settings.SCORING_VERSION,
+            payload=payload,
         )
-        row = (await self.db.execute(stmt)).scalars().first()
-        if row is None:
-            self.db.add(
-                MatchRecommendationCache(
-                    batch_id=batch_id,
-                    cache_type=cache_type,
-                    entity_key=entity_key,
-                    scoring_version=settings.SCORING_VERSION,
-                    payload=payload,
-                )
-            )
-        else:
-            row.payload = payload
-            row.scoring_version = settings.SCORING_VERSION
+        stmt = stmt.on_conflict_do_update(
+            constraint="uq_match_rec_cache",
+            set_={
+                "scoring_version": settings.SCORING_VERSION,
+                "payload": payload,
+                "computed_at": func.now(),
+            },
+        )
+        await self.db.execute(stmt)
         await self.db.commit()
 
     def _build_preference_pairs(self, project) -> list[tuple[str, str]]:
