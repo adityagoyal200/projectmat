@@ -9,6 +9,7 @@ class StudentRow(BaseModel):
     email: str | None = None
     phone: str | None = None
     file: str | None = None
+    skills: str | None = None
     github_username: str | None = None
     leetcode_username: str | None = None
     codeforces_username: str | None = None
@@ -80,6 +81,7 @@ ImportBatchStatus = Literal[
 class ImportBatchCandidateItem(BaseModel):
     id: int
     import_batch_id: int | None = None
+    source: str | None = None
     registration_number: str
     name: str
     email: str | None = None
@@ -176,3 +178,7 @@ class ParsedWorkbook(BaseModel):
     resumes_url: str | None = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
+
+
+class DriveResumesImportRequest(BaseModel):
+    resumes_url: str

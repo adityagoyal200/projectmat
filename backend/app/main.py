@@ -1,6 +1,7 @@
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
 
 import structlog
 from fastapi import Depends, FastAPI, Request, Response
@@ -17,6 +18,7 @@ from app.dependencies import get_db
 from app.features.candidates.router import router as candidates_router
 from app.features.evaluations.router import router as evaluations_router
 from app.features.imports.router import router as imports_router
+from app.features.matching.embeddings import warm_up_embeddings
 from app.features.matching.router import router as matching_router
 from app.features.mentors.router import router as mentors_router
 from app.features.projects.router import router as projects_router
@@ -50,11 +52,22 @@ structlog.configure(
 
 log = structlog.get_logger()
 
+
 # 2. Scaffolding FastAPI Application
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    # Preload the embedding model in a background thread so the first matching
+    # request doesn't pay the ~30s CPU load (which used to also block the
+    # event loop, freezing every in-flight request while it loaded).
+    warm_up_embeddings()
+    yield
+
+
 app = FastAPI(
     title="ProjectMatchAI API",
     version="0.1.0",
     description="Backend API for ProjectMatchAI bulk intake and matching",
+    lifespan=lifespan,
 )
 
 # 3. CORS Configuration Middleware

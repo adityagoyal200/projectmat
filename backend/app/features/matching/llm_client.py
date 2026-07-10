@@ -310,35 +310,52 @@ async def _call_ollama(
         "temperature": 0.2,
     }
 
-    try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            response = await client.post(url, headers=headers, json=payload)
-            if response.status_code != 200:
+    max_attempts = 2  # 1 initial + 1 retry for transient timeouts
+    last_error: str | None = None
+
+    for attempt in range(max_attempts):
+        try:
+            async with httpx.AsyncClient(timeout=300.0) as client:
+                response = await client.post(url, headers=headers, json=payload)
+                if response.status_code != 200:
+                    return LLMCompletionResult(
+                        content="",
+                        provider="ollama",
+                        model=model,
+                        error=response.text[:500],
+                        http_status=response.status_code,
+                        prompt_preview=prompt_preview,
+                    )
+
+                data = response.json()
                 return LLMCompletionResult(
-                    content="",
+                    content=data["choices"][0]["message"]["content"],
                     provider="ollama",
                     model=model,
-                    error=response.text[:500],
-                    http_status=response.status_code,
+                    http_status=200,
                     prompt_preview=prompt_preview,
                 )
+        except httpx.ReadTimeout:
+            last_error = "ReadTimeout"
+            if attempt < max_attempts - 1:
+                logger.warning(
+                    "Ollama ReadTimeout, retrying...",
+                    model=model,
+                    attempt=attempt + 1,
+                )
+                await asyncio.sleep(2.0)
+                continue
+        except Exception as e:
+            last_error = str(e) or type(e).__name__
+            break
 
-            data = response.json()
-            return LLMCompletionResult(
-                content=data["choices"][0]["message"]["content"],
-                provider="ollama",
-                model=model,
-                http_status=200,
-                prompt_preview=prompt_preview,
-            )
-    except Exception as e:
-        return LLMCompletionResult(
-            content="",
-            provider="ollama",
-            model=model,
-            error=str(e) or type(e).__name__,
-            prompt_preview=prompt_preview,
-        )
+    return LLMCompletionResult(
+        content="",
+        provider="ollama",
+        model=model,
+        error=last_error,
+        prompt_preview=prompt_preview,
+    )
 
 
 async def _call_openai(

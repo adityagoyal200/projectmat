@@ -26,6 +26,7 @@ export interface ImportBatchCandidateItem {
   kaggle_username?: string | null;
   scholar_id?: string | null;
   live_project_links?: string[] | null;
+  source?: string | null;
 }
 
 export interface ImportBatchMentorItem {
@@ -71,6 +72,7 @@ export interface Candidate {
   kaggle_username?: string | null;
   scholar_id?: string | null;
   live_project_links?: string[] | null;
+  source?: string | null;
 }
 
 export interface Mentor {
@@ -87,12 +89,14 @@ export interface Mentor {
 export interface Project {
   id: number;
   title: string;
+  abstract?: string | null;
   mentor?: {
     id?: number;
     name: string;
     email?: string;
     phone?: string | null;
   } | null;
+  prerequisites?: { skill: { id: number; name: string } }[] | null;
 }
 
 export interface ScoreComponents {
@@ -113,6 +117,16 @@ export interface ScoreComponents {
   llm_evaluated: boolean;
 }
 
+export interface RepositoryEvaluationSummary {
+  repository_name?: string | null;
+  repository_url: string;
+  status: string;
+  score: number;
+  logic_score?: number | null;
+  findings_count: number;
+  source?: string | null;
+}
+
 export interface ScoreBreakdown {
   scoring_version: string;
   formula: string;
@@ -121,6 +135,10 @@ export interface ScoreBreakdown {
   prerequisite_detail: string;
   resume_experience_detail: string;
   developer_profile_detail: string;
+  github_detail?: string;
+  coding_profiles_detail?: string;
+  achievements_detail?: string;
+  repository_evaluations?: RepositoryEvaluationSummary[];
   preference_detail: string;
   embedding_detail: string;
   llm_scoring_rationale: string;
@@ -135,6 +153,7 @@ export interface MatchRecommendation {
   candidate_id?: number;
   candidate_name?: string;
   registration_number?: string;
+  achievements?: string[];
   mentor_name?: string;
   mentor_email?: string | null;
   mentor_phone?: string | null;
@@ -150,13 +169,16 @@ export interface MatchRecommendation {
 export interface StudentRecommendationsResponse {
   candidate_name: string;
   registration_number: string;
+  achievements?: string[];
   recommendations: MatchRecommendation[];
+  cached?: boolean;
 }
 
 export interface ProjectRecommendationsResponse {
   project_id: number;
   project_title: string;
   recommendations: MatchRecommendation[];
+  cached?: boolean;
 }
 
 export interface LlmPreviewResult {

@@ -205,6 +205,13 @@ def extract_profiles(text: str) -> ExtractedProfiles:
         repositories.append(f"https://github.com/{owner}/{repo}")
         if result.github_username is None:
             result.github_username = owner
+        elif (
+            owner.lower() != result.github_username.lower()
+            and owner.lower().startswith(result.github_username.lower())
+        ):
+            # The standalone profile URL was truncated at a PDF line wrap;
+            # the repository owner carries the complete username.
+            result.github_username = owner
     result.github_repositories = _dedupe_urls(repositories)
 
     # LeetCode

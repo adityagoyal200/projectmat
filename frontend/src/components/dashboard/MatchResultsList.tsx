@@ -1,4 +1,4 @@
-import { Sparkles, Trophy } from 'lucide-react';
+import { RefreshCw, Sparkles, Trophy } from 'lucide-react';
 
 import { RecommendationCard } from '@/components/dashboard/RecommendationCard';
 import type { MatchRecommendation } from '@/types/api';
@@ -9,6 +9,16 @@ interface MatchResultsListProps {
   emptyMessage: string;
   contextTitle?: string;
   contextSubtitle?: string;
+  /** Student's registration number when the list is scoped to one student. */
+  registrationNumber?: string;
+  /** Project id when the list is scoped to one project. */
+  projectId?: number;
+  /** Whether these results were served from the saved cache. */
+  cached?: boolean;
+  /** Recompute (bypass cache); when provided, a Recompute button is shown. */
+  onRecompute?: () => void;
+  /** True while a recompute is in flight. */
+  recomputing?: boolean;
 }
 
 export function MatchResultsList({
@@ -17,6 +27,11 @@ export function MatchResultsList({
   emptyMessage,
   contextTitle,
   contextSubtitle,
+  registrationNumber,
+  projectId,
+  cached,
+  onRecompute,
+  recomputing,
 }: MatchResultsListProps) {
   if (results.length === 0) {
     return (
@@ -43,7 +58,7 @@ export function MatchResultsList({
         </div>
       )}
 
-      <div className="glass-card flex items-center gap-3 px-4 py-3">
+      <div className="glass-card flex flex-wrap items-center gap-3 px-4 py-3">
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-amber-400/20 to-orange-500/20">
           <Trophy className="h-4 w-4 text-amber-400" />
         </div>
@@ -53,6 +68,25 @@ export function MatchResultsList({
           </span>
           <span className="ml-2 text-sm text-muted-foreground">ranked by hybrid match score</span>
         </div>
+        <div className="ml-auto flex items-center gap-3">
+          {cached && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-300">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+              Saved result
+            </span>
+          )}
+          {onRecompute && (
+            <button
+              type="button"
+              onClick={onRecompute}
+              disabled={recomputing}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-amber-300 disabled:opacity-40"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${recomputing ? 'animate-spin' : ''}`} />
+              {recomputing ? 'Recomputing…' : 'Recompute'}
+            </button>
+          )}
+        </div>
       </div>
       <div className="space-y-3">
         {results.map((rec) => (
@@ -60,6 +94,8 @@ export function MatchResultsList({
             key={variant === 'project' ? rec.project_id : rec.candidate_id}
             rec={rec}
             variant={variant}
+            reportRegistration={registrationNumber ?? rec.registration_number}
+            reportProjectId={projectId ?? rec.project_id}
           />
         ))}
       </div>

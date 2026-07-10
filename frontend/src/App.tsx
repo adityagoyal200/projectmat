@@ -2,6 +2,7 @@ import { useState, useEffect, type ComponentType, type ReactNode } from 'react';
 import {
   Activity,
   Brain,
+  FileDown,
   FileSpreadsheet,
   FileText,
   FolderKanban,
@@ -22,6 +23,7 @@ import { Button } from '@/components/ui/button';
 import { CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import client from '@/lib/api/client';
+import { downloadBatchReport } from '@/lib/api/report';
 import { cn } from '@/lib/utils';
 import type {
   BatchScoreMatrixResponse,
@@ -37,7 +39,7 @@ import type {
   StudentRecommendationsResponse,
 } from '@/types/api';
 
-type Tab = 'import' | 'match' | 'mentor' | 'batches' | 'llm';
+type Tab = 'import' | 'match' | 'mentor' | 'batches' | 'llm' | 'dummy_projects';
 type MatchMode = 'student' | 'project' | 'resume';
 
 function StatusPill({ ok, label }: { ok: boolean; label: string }) {
@@ -115,6 +117,15 @@ export default function App() {
   const [selectedBatchDetails, setSelectedBatchDetails] = useState<ImportBatchResponse | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
+  const [driveUrl, setDriveUrl] = useState('');
+  const [importingDrive, setImportingDrive] = useState(false);
+  const [driveError, setDriveError] = useState<string | null>(null);
+  const [driveSuccessInfo, setDriveSuccessInfo] = useState<{
+    id: number;
+    status: string;
+    candidateCount: number;
+  } | null>(null);
+
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [mentors, setMentors] = useState<Mentor[]>([]);
@@ -123,9 +134,9 @@ export default function App() {
   const [selectedCandidateReg, setSelectedCandidateReg] = useState('');
   const [selectedProjectId, setSelectedProjectId] = useState('');
   const [candidateRecommendations, setCandidateRecommendations] = useState<MatchRecommendation[]>([]);
-  const [studentMatchContext, setStudentMatchContext] = useState<{ candidateName: string; registrationNumber: string } | null>(null);
+  const [studentMatchContext, setStudentMatchContext] = useState<{ candidateName: string; registrationNumber: string; cached: boolean } | null>(null);
   const [projectRecommendations, setProjectRecommendations] = useState<MatchRecommendation[]>([]);
-  const [projectMatchContext, setProjectMatchContext] = useState<{ projectTitle: string; projectId: number } | null>(null);
+  const [projectMatchContext, setProjectMatchContext] = useState<{ projectTitle: string; projectId: number; cached: boolean } | null>(null);
   const [matchingLoading, setMatchingLoading] = useState(false);
   const [matchError, setMatchError] = useState<string | null>(null);
 
@@ -145,7 +156,7 @@ export default function App() {
   // ── Mentor tab ────────────────────────────────────────────────────────────
   const [selectedMentorId, setSelectedMentorId] = useState('');
   const [mentorMatchResults, setMentorMatchResults] = useState<MatchRecommendation[]>([]);
-  const [mentorMatchContext, setMentorMatchContext] = useState<{ projectTitle: string; projectId: number } | null>(null);
+  const [mentorMatchContext, setMentorMatchContext] = useState<{ projectTitle: string; projectId: number; cached: boolean } | null>(null);
   const [mentorMatchLoading, setMentorMatchLoading] = useState(false);
   const [mentorMatchError, setMentorMatchError] = useState<string | null>(null);
 
@@ -155,6 +166,8 @@ export default function App() {
   const [batchMatrix, setBatchMatrix] = useState<BatchScoreMatrixResponse | null>(null);
   const [batchScoreLoading, setBatchScoreLoading] = useState(false);
   const [batchScoreError, setBatchScoreError] = useState<string | null>(null);
+  const [batchReportLoading, setBatchReportLoading] = useState(false);
+  const [batchReportError, setBatchReportError] = useState<string | null>(null);
 
   // ── LLM tab ───────────────────────────────────────────────────────────────
   const [previewPrompt, setPreviewPrompt] = useState(
@@ -163,6 +176,37 @@ export default function App() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewResult, setPreviewResult] = useState<LlmPreviewResult | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  // ── Dummy Projects tab ───────────────────────────────────────────────────
+  const [dummyProjects, setDummyProjects] = useState<Project[]>([]);
+  const [dummyProjectsLoading, setDummyProjectsLoading] = useState(false);
+  const [newDummyTitle, setNewDummyTitle] = useState('');
+  const [newDummyAbstract, setNewDummyAbstract] = useState('');
+  const [newDummyMentorName, setNewDummyMentorName] = useState('');
+  const [newDummyMentorEmail, setNewDummyMentorEmail] = useState('');
+  const [newDummyPrereqs, setNewDummyPrereqs] = useState('');
+  const [dummyProjectSaving, setDummyProjectSaving] = useState(false);
+  const [dummyProjectError, setDummyProjectError] = useState<string | null>(null);
+  const [editingDummyId, setEditingDummyId] = useState<number | null>(null);
+
+  const [studentSourceFilter, setStudentSourceFilter] = useState<'all' | 'excel' | 'drive'>('all');
+
+  const refreshDummyProjects = async () => {
+    setDummyProjectsLoading(true);
+    try {
+      const res = await client.get<Project[]>('/projects?dummy_only=true');
+      setDummyProjects(res.data);
+    } catch (e) {
+      console.error('Failed to load dummy projects', e);
+    } finally {
+      setDummyProjectsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'dummy_projects') {
+      void refreshDummyProjects();
+    }
+  }, [activeTab]);
 
   // ── Data fetching ─────────────────────────────────────────────────────────
   const refreshLists = async () => {
@@ -170,7 +214,7 @@ export default function App() {
     setListsError(null);
     try {
       const [candRes, projRes, mentorRes, batchRes] = await Promise.all([
-        client.get<Candidate[]>('/candidates'),
+        client.get<Candidate[]>('/candidates?all=true'),
         client.get<Project[]>('/projects'),
         client.get<Mentor[]>('/mentors'),
         client.get<ImportBatchListItem[]>('/import-batches'),
@@ -227,11 +271,22 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const hasParsing = importBatches.some((b) => b.status === 'parsing');
+    if (!hasParsing) return;
+
+    const interval = setInterval(() => {
+      void refreshLists();
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [importBatches]);
+
+  useEffect(() => {
     if (activeTab !== 'batches') return;
     const stale = listsLastLoadedAt == null || Date.now() - listsLastLoadedAt > 15_000;
     if (!stale) return;
     void refreshLists();
-  }, [activeTab]);
+  }, [activeTab, listsLastLoadedAt]);
 
   // ── Actions ───────────────────────────────────────────────────────────────
   const handleWorkbookUpload = async () => {
@@ -259,18 +314,113 @@ export default function App() {
     }
   };
 
-  const loadCandidateRecs = async () => {
+  const handleDriveImport = async () => {
+    if (!driveUrl) return;
+    setImportingDrive(true);
+    setDriveError(null);
+    setDriveSuccessInfo(null);
+    try {
+      const res = await client.post('/import-batches/drive-resumes', { resumes_url: driveUrl });
+      const batchId = res.data.id;
+      setDriveSuccessInfo({ id: batchId, status: 'parsing', candidateCount: 0 });
+      setDriveUrl('');
+
+      // Resumes download + per-resume name extraction run in the background.
+      // Poll the batch until it leaves "parsing" so the count updates live
+      // instead of showing a stale 0.
+      const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+      for (let i = 0; i < 60; i += 1) {
+        await sleep(3000);
+        try {
+          const detail = await client.get<ImportBatchResponse>(`/import-batches/${batchId}`);
+          setDriveSuccessInfo({
+            id: batchId,
+            status: detail.data.status,
+            candidateCount: detail.data.candidates.length,
+          });
+          if (detail.data.status !== 'parsing') break;
+        } catch {
+          // transient; keep polling
+        }
+      }
+      await refreshLists();
+    } catch (e: unknown) {
+      setDriveError(e instanceof Error ? e.message : 'Import failed');
+    } finally {
+      setImportingDrive(false);
+    }
+  };
+
+  const resetDummyForm = () => {
+    setEditingDummyId(null);
+    setNewDummyTitle('');
+    setNewDummyAbstract('');
+    setNewDummyMentorName('');
+    setNewDummyMentorEmail('');
+    setNewDummyPrereqs('');
+  };
+
+  const startEditDummyProject = (p: Project) => {
+    setEditingDummyId(p.id);
+    setNewDummyTitle(p.title);
+    setNewDummyAbstract(p.abstract || '');
+    setNewDummyMentorName(p.mentor?.name || '');
+    setNewDummyMentorEmail(p.mentor?.email || '');
+    setNewDummyPrereqs((p.prerequisites || []).map((pr) => pr.skill.name).join(', '));
+    setDummyProjectError(null);
+  };
+
+  const handleCreateDummyProject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newDummyTitle || !newDummyMentorName || !newDummyMentorEmail) return;
+    setDummyProjectSaving(true);
+    setDummyProjectError(null);
+    try {
+      const payload = {
+        title: newDummyTitle,
+        abstract: newDummyAbstract || null,
+        mentor_name: newDummyMentorName,
+        mentor_email: newDummyMentorEmail,
+        prerequisites: newDummyPrereqs.split(',').map((s) => s.trim()).filter(Boolean),
+      };
+      if (editingDummyId != null) {
+        await client.put(`/projects/dummy/${editingDummyId}`, payload);
+      } else {
+        await client.post('/projects/dummy', payload);
+      }
+      resetDummyForm();
+      await refreshDummyProjects();
+      await refreshLists();
+    } catch (err: unknown) {
+      setDummyProjectError(err instanceof Error ? err.message : 'Failed to save dummy project');
+    } finally {
+      setDummyProjectSaving(false);
+    }
+  };
+
+  const handleDeleteDummyProject = async (id: number) => {
+    setDummyProjectError(null);
+    try {
+      await client.delete(`/projects/dummy/${id}`);
+      if (editingDummyId === id) resetDummyForm();
+      await refreshDummyProjects();
+      await refreshLists();
+    } catch (err: unknown) {
+      setDummyProjectError(err instanceof Error ? err.message : 'Failed to delete dummy project');
+    }
+  };
+
+  const loadCandidateRecs = async (force = false) => {
     if (!selectedCandidateReg) return;
     setMatchingLoading(true);
     setMatchError(null);
-    setCandidateRecommendations([]);
-    setStudentMatchContext(null);
+    if (!force) setCandidateRecommendations([]);
     try {
       const res = await client.get<StudentRecommendationsResponse>(
-        `/matching/student-recommendations/${selectedCandidateReg}`
+        `/matching/student-recommendations/${selectedCandidateReg}${force ? '?force=true' : ''}`
       );
       setCandidateRecommendations(res.data.recommendations);
-      setStudentMatchContext({ candidateName: res.data.candidate_name, registrationNumber: res.data.registration_number });
+      setStudentMatchContext({ candidateName: res.data.candidate_name, registrationNumber: res.data.registration_number, cached: res.data.cached ?? false });
     } catch (e: unknown) {
       setMatchError(e instanceof Error ? e.message : 'Matching failed');
     } finally {
@@ -278,18 +428,17 @@ export default function App() {
     }
   };
 
-  const loadProjectRecs = async () => {
+  const loadProjectRecs = async (force = false) => {
     if (!selectedProjectId) return;
     setMatchingLoading(true);
     setMatchError(null);
-    setProjectRecommendations([]);
-    setProjectMatchContext(null);
+    if (!force) setProjectRecommendations([]);
     try {
       const res = await client.get<ProjectRecommendationsResponse>(
-        `/matching/project-recommendations/${selectedProjectId}`
+        `/matching/project-recommendations/${selectedProjectId}${force ? '?force=true' : ''}`
       );
       setProjectRecommendations(res.data.recommendations);
-      setProjectMatchContext({ projectTitle: res.data.project_title, projectId: res.data.project_id });
+      setProjectMatchContext({ projectTitle: res.data.project_title, projectId: res.data.project_id, cached: res.data.cached ?? false });
     } catch (e: unknown) {
       setMatchError(e instanceof Error ? e.message : 'Matching failed');
     } finally {
@@ -341,19 +490,18 @@ export default function App() {
     }
   };
 
-  const loadMentorStudentRecs = async () => {
+  const loadMentorStudentRecs = async (force = false) => {
     const mentor = mentors.find((m) => String(m.id) === selectedMentorId);
     if (!mentor?.project?.id) return;
     setMentorMatchLoading(true);
     setMentorMatchError(null);
-    setMentorMatchResults([]);
-    setMentorMatchContext(null);
+    if (!force) setMentorMatchResults([]);
     try {
       const res = await client.get<ProjectRecommendationsResponse>(
-        `/matching/project-recommendations/${mentor.project.id}`
+        `/matching/project-recommendations/${mentor.project.id}${force ? '?force=true' : ''}`
       );
       setMentorMatchResults(res.data.recommendations);
-      setMentorMatchContext({ projectTitle: res.data.project_title, projectId: res.data.project_id });
+      setMentorMatchContext({ projectTitle: res.data.project_title, projectId: res.data.project_id, cached: res.data.cached ?? false });
     } catch (e: unknown) {
       setMentorMatchError(e instanceof Error ? e.message : 'Matching failed');
     } finally {
@@ -387,7 +535,21 @@ export default function App() {
     setSelectedBatchDetails(null);
     setBatchMatrix(null);
     setBatchScoreError(null);
+    setBatchReportError(null);
     loadBatchScores(id);
+  };
+
+  const handleBatchReport = async () => {
+    if (!selectedBatchId) return;
+    setBatchReportLoading(true);
+    setBatchReportError(null);
+    try {
+      await downloadBatchReport(selectedBatchId);
+    } catch (e: unknown) {
+      setBatchReportError(e instanceof Error ? e.message : 'Failed to generate report');
+    } finally {
+      setBatchReportLoading(false);
+    }
   };
 
   const apiOk = health?.status === 'ok';
@@ -468,6 +630,9 @@ export default function App() {
           <TabButton active={activeTab === 'import'} onClick={() => setActiveTab('import')} icon={Upload}>
             Import
           </TabButton>
+          <TabButton active={activeTab === 'dummy_projects'} onClick={() => setActiveTab('dummy_projects')} icon={FolderKanban}>
+            Dummy Projects
+          </TabButton>
           <TabButton active={activeTab === 'llm'} onClick={() => setActiveTab('llm')} icon={Sparkles}>
             LLM test
           </TabButton>
@@ -535,18 +700,32 @@ export default function App() {
                 {matchMode === 'student' && (
                   <div className="flex flex-col gap-3 sm:flex-row">
                     <select
+                      className="select-glass sm:w-48"
+                      value={studentSourceFilter}
+                      onChange={(e) => {
+                        setStudentSourceFilter(e.target.value as 'all' | 'excel' | 'drive');
+                        setSelectedCandidateReg('');
+                      }}
+                    >
+                      <option value="all">All Sources</option>
+                      <option value="excel">Excel Uploads</option>
+                      <option value="drive">Drive Link Uploads</option>
+                    </select>
+                    <select
                       className="select-glass flex-1"
                       value={selectedCandidateReg}
                       onChange={(e) => setSelectedCandidateReg(e.target.value)}
                     >
                       <option value="">Select a student…</option>
-                      {candidates.map((c) => (
-                        <option key={c.id} value={c.registration_number}>
-                          {c.name} ({c.registration_number})
-                        </option>
-                      ))}
+                      {candidates
+                        .filter((c) => studentSourceFilter === 'all' || c.source === studentSourceFilter)
+                        .map((c) => (
+                          <option key={c.id} value={c.registration_number}>
+                            {c.name} ({c.registration_number})
+                          </option>
+                        ))}
                     </select>
-                    <Button onClick={loadCandidateRecs} disabled={!selectedCandidateReg || matchingLoading} className="btn-glow sm:w-44">
+                    <Button onClick={() => loadCandidateRecs()} disabled={!selectedCandidateReg || matchingLoading} className="btn-glow sm:w-44">
                       {matchingLoading ? 'Running…' : 'Match projects'}
                     </Button>
                   </div>
@@ -566,7 +745,7 @@ export default function App() {
                         </option>
                       ))}
                     </select>
-                    <Button onClick={loadProjectRecs} disabled={!selectedProjectId || matchingLoading} className="btn-glow sm:w-44">
+                    <Button onClick={() => loadProjectRecs()} disabled={!selectedProjectId || matchingLoading} className="btn-glow sm:w-44">
                       {matchingLoading ? 'Running…' : 'Match students'}
                     </Button>
                   </div>
@@ -625,24 +804,33 @@ export default function App() {
               <MatchResultsList
                 results={candidateRecommendations}
                 variant="project"
+                registrationNumber={studentMatchContext?.registrationNumber}
                 emptyMessage="Select a student and run matching to see ranked project recommendations."
                 contextTitle={studentMatchContext ? `Recommendations for ${studentMatchContext.candidateName}` : undefined}
                 contextSubtitle={studentMatchContext ? `Registration ${studentMatchContext.registrationNumber} · expand any card for weights, contributions, and LLM rationale` : undefined}
+                cached={studentMatchContext?.cached}
+                onRecompute={() => loadCandidateRecs(true)}
+                recomputing={matchingLoading}
               />
             )}
             {matchMode === 'project' && (
               <MatchResultsList
                 results={projectRecommendations}
                 variant="candidate"
+                projectId={projectMatchContext?.projectId}
                 emptyMessage="Select a project and run matching to see ranked student recommendations."
                 contextTitle={projectMatchContext ? `Students for "${projectMatchContext.projectTitle}"` : undefined}
                 contextSubtitle={projectMatchContext ? `Project #${projectMatchContext.projectId} · full calculation details inside each card` : undefined}
+                cached={projectMatchContext?.cached}
+                onRecompute={() => loadProjectRecs(true)}
+                recomputing={matchingLoading}
               />
             )}
             {matchMode === 'resume' && (
               <MatchResultsList
                 results={resumeRecs}
                 variant="project"
+                registrationNumber={resumeMatchContext?.registrationNumber}
                 emptyMessage="Upload a PDF resume to see ranked project recommendations."
                 contextTitle={resumeMatchContext ? `Resume match · ${resumeMatchContext.candidateName}` : undefined}
                 contextSubtitle={resumeMatchContext ? `Registration ${resumeMatchContext.registrationNumber}` : undefined}
@@ -687,7 +875,7 @@ export default function App() {
                     ))}
                   </select>
                   <Button
-                    onClick={loadMentorStudentRecs}
+                    onClick={() => loadMentorStudentRecs()}
                     disabled={!selectedMentorId || mentorMatchLoading || !mentors.find((m) => String(m.id) === selectedMentorId)?.project}
                     className="btn-glow sm:w-44"
                   >
@@ -748,9 +936,13 @@ export default function App() {
             <MatchResultsList
               results={mentorMatchResults}
               variant="candidate"
+              projectId={mentorMatchContext?.projectId}
               emptyMessage='Select a mentor and click "Find students" to see ranked student recommendations.'
               contextTitle={mentorMatchContext ? `Students for "${mentorMatchContext.projectTitle}"` : undefined}
               contextSubtitle={mentorMatchContext ? `Project #${mentorMatchContext.projectId} · expand each card for full score breakdown` : undefined}
+              cached={mentorMatchContext?.cached}
+              onRecompute={() => loadMentorStudentRecs(true)}
+              recomputing={mentorMatchLoading}
             />
           </div>
         )}
@@ -791,8 +983,28 @@ export default function App() {
                     ↺ Recompute
                   </button>
                 )}
+                <Button
+                  onClick={handleBatchReport}
+                  disabled={!selectedBatchId || batchReportLoading || batchScoreLoading}
+                  size="sm"
+                  className="btn-glow gap-2"
+                  title={
+                    selectedBatchId
+                      ? 'Download a PDF of every student’s top 2 projects vs. the mentor-selected students'
+                      : 'Select a batch first'
+                  }
+                >
+                  <FileDown className="h-4 w-4" />
+                  {batchReportLoading ? 'Generating…' : 'Generate PDF report'}
+                </Button>
               </div>
             </div>
+
+            {batchReportError && (
+              <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200 backdrop-blur-sm">
+                {batchReportError}
+              </div>
+            )}
 
             {/* Batch cards */}
             {importBatches.length === 0 ? (
@@ -1028,6 +1240,56 @@ export default function App() {
               </CardContent>
             </div>
 
+            <div className="glass-card overflow-hidden">
+              <div className="h-1 bg-gradient-to-r from-violet-500 to-fuchsia-500" />
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg font-bold">
+                  <FileText className="h-5 w-5 text-violet-400" />
+                  Import resumes from Drive link
+                </CardTitle>
+                <CardDescription>Create a workbook-less batch by importing candidate resumes directly from a Google Drive folder URL.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <Input
+                    placeholder="Enter Google Drive folder URL containing PDFs..."
+                    className="flex-1 border-white/[0.08] bg-white/[0.03]"
+                    value={driveUrl}
+                    onChange={(e) => setDriveUrl(e.target.value)}
+                  />
+                  <Button onClick={handleDriveImport} disabled={importingDrive || !driveUrl} className="btn-glow gap-2">
+                    <Upload className="h-4 w-4" />
+                    {importingDrive ? 'Importing…' : 'Import'}
+                  </Button>
+                </div>
+
+                {driveError && (
+                  <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+                    {driveError}
+                  </div>
+                )}
+
+                {driveSuccessInfo && (
+                  driveSuccessInfo.status === 'parsing' ? (
+                    <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+                      <span className="inline-flex items-center gap-2">
+                        <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-ping" />
+                        Importing resumes for Batch #{driveSuccessInfo.id}… {driveSuccessInfo.candidateCount} candidate{driveSuccessInfo.candidateCount === 1 ? '' : 's'} created so far. Downloading + parsing each resume takes a moment.
+                      </span>
+                    </div>
+                  ) : driveSuccessInfo.status === 'failed' ? (
+                    <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+                      Batch #{driveSuccessInfo.id} failed — no resumes could be downloaded or parsed. Check that the Drive folder is shared and contains PDF resumes.
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+                      Batch #{driveSuccessInfo.id} imported {driveSuccessInfo.candidateCount} candidate{driveSuccessInfo.candidateCount === 1 ? '' : 's'}. They're now selectable under Matching → By student (Drive Link Uploads) and match against your dummy projects.
+                    </div>
+                  )
+                )}
+              </CardContent>
+            </div>
+
             {batchInfo && (
               <div className="glass-card overflow-hidden">
                 <div className="h-1 bg-gradient-to-r from-cyan-500 to-emerald-500" />
@@ -1147,6 +1409,135 @@ export default function App() {
                 </CardContent>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════
+            DUMMY PROJECTS TAB
+        ═══════════════════════════════════════════════════════════ */}
+        {activeTab === 'dummy_projects' && (
+          <div className="space-y-6 animate-fade-in">
+            <div className="grid gap-6 md:grid-cols-2">
+              {/* Add Form */}
+              <div className="glass-card overflow-hidden">
+                <div className="h-1 bg-gradient-to-r from-violet-500 to-fuchsia-500" />
+                <CardHeader>
+                  <CardTitle className="text-lg font-bold">
+                    {editingDummyId != null ? `Edit Dummy Project #${editingDummyId}` : 'Add Dummy Project'}
+                  </CardTitle>
+                  <CardDescription>Create a project not linked to any workbook batch (matched only against Drive candidates).</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={handleCreateDummyProject} className="space-y-4">
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground">Project Title *</label>
+                      <Input required placeholder="Title" value={newDummyTitle} onChange={(e) => setNewDummyTitle(e.target.value)} />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground">Description / Abstract</label>
+                      <textarea
+                        className="input-glass w-full rounded-xl border border-white/[0.08] bg-white/[0.03] p-3 text-sm text-foreground focus:border-violet-500 focus:outline-none"
+                        rows={3}
+                        placeholder="Abstract description..."
+                        value={newDummyAbstract}
+                        onChange={(e) => setNewDummyAbstract(e.target.value)}
+                      />
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <label className="text-xs font-semibold text-muted-foreground">Mentor Name *</label>
+                        <Input required placeholder="Mentor Name" value={newDummyMentorName} onChange={(e) => setNewDummyMentorName(e.target.value)} />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-muted-foreground">Mentor Email *</label>
+                        <Input required type="email" placeholder="email@example.com" value={newDummyMentorEmail} onChange={(e) => setNewDummyMentorEmail(e.target.value)} />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground">Prerequisites (comma-separated)</label>
+                      <Input placeholder="Python, PyTorch, React" value={newDummyPrereqs} onChange={(e) => setNewDummyPrereqs(e.target.value)} />
+                    </div>
+                    {dummyProjectError && (
+                      <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-xs text-rose-200">
+                        {dummyProjectError}
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <Button type="submit" disabled={dummyProjectSaving} className="btn-glow w-full">
+                        {dummyProjectSaving ? 'Saving…' : editingDummyId != null ? 'Update Project' : 'Add Project'}
+                      </Button>
+                      {editingDummyId != null && (
+                        <Button type="button" variant="outline" onClick={resetDummyForm} disabled={dummyProjectSaving} className="border-white/10 bg-white/[0.03]">
+                          Cancel
+                        </Button>
+                      )}
+                    </div>
+                  </form>
+                </CardContent>
+              </div>
+
+              {/* List of Dummy Projects */}
+              <div className="glass-card overflow-hidden">
+                <div className="h-1 bg-gradient-to-r from-cyan-500 to-violet-500" />
+                <CardHeader>
+                  <CardTitle className="text-lg font-bold">Dummy Projects ({dummyProjects.length})</CardTitle>
+                  <CardDescription>All batch-less custom projects configured in the system.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="max-h-[500px] space-y-3 overflow-y-auto pr-1">
+                    {dummyProjectsLoading ? (
+                      <p className="text-sm text-muted-foreground animate-pulse">Loading dummy projects...</p>
+                    ) : dummyProjects.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No dummy projects created yet.</p>
+                    ) : (
+                      dummyProjects.map((p) => (
+                        <div key={p.id} className={cn(
+                          'rounded-xl border bg-white/[0.03] p-4 text-xs space-y-2',
+                          editingDummyId === p.id ? 'border-violet-500/50' : 'border-white/[0.06]'
+                        )}>
+                          <div className="flex items-start justify-between gap-3">
+                            <h4 className="font-semibold text-foreground text-sm">{p.title}</h4>
+                            <div className="flex shrink-0 items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => startEditDummyProject(p)}
+                                className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-medium text-cyan-300 hover:bg-white/[0.08] transition-colors"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteDummyProject(p.id)}
+                                className="rounded-md border border-rose-500/20 bg-rose-500/10 px-2 py-0.5 text-[10px] font-medium text-rose-300 hover:bg-rose-500/20 transition-colors"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </div>
+                          {p.abstract && <p className="text-muted-foreground line-clamp-3">{p.abstract}</p>}
+                          {p.mentor && (
+                            <div className="flex flex-wrap gap-x-3 text-[11px] text-muted-foreground/80">
+                              <span className="font-medium text-foreground">{p.mentor.name}</span>
+                              <span>·</span>
+                              <span>{p.mentor.email}</span>
+                            </div>
+                          )}
+                          {p.prerequisites && p.prerequisites.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 pt-1">
+                              {p.prerequisites.map((pr) => (
+                                <span key={pr.skill.id} className="rounded bg-white/[0.05] border border-white/[0.08] px-1.5 py-0.5 text-[10px] text-foreground/85">
+                                  {pr.skill.name}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </CardContent>
+              </div>
+            </div>
           </div>
         )}
 

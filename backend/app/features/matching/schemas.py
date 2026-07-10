@@ -39,6 +39,18 @@ class ScoreComponents(BaseModel):
     llm_evaluated: bool = Field(description="Whether full LLM evaluation was run")
 
 
+class RepositoryEvaluationSummary(BaseModel):
+    repository_name: str | None = None
+    repository_url: str = ""
+    status: str = "unknown"
+    score: float = Field(default=0.0, description="Static review quality (0.0-1.0)")
+    logic_score: float | None = Field(
+        default=None, description="AI logic/code-quality review score (0.0-1.0)"
+    )
+    findings_count: int = 0
+    source: str | None = None
+
+
 class ScoreBreakdown(BaseModel):
     scoring_version: str
     formula: str
@@ -47,6 +59,14 @@ class ScoreBreakdown(BaseModel):
     prerequisite_detail: str
     resume_experience_detail: str
     developer_profile_detail: str
+    github_detail: str = ""
+    coding_profiles_detail: str = ""
+    achievements_detail: str = ""
+    repository_evaluations: list[RepositoryEvaluationSummary] = Field(
+        default_factory=list,
+        description="Per-repository review results from the agy pipeline; "
+        "empty if repository evaluation was never run for the candidate.",
+    )
     preference_detail: str
     embedding_detail: str
     llm_scoring_rationale: str
@@ -58,6 +78,7 @@ class ProjectMatchRecommendation(BaseModel):
     rank: int
     project_id: int
     project_title: str
+    achievements: list[str] = Field(default_factory=list)
     mentor_name: str
     mentor_email: str | None = None
     mentor_phone: str | None = None
@@ -77,6 +98,7 @@ class StudentMatchRecommendation(BaseModel):
     candidate_id: int
     candidate_name: str
     registration_number: str
+    achievements: list[str] = Field(default_factory=list)
     final_score: float = Field(description="Weighted hybrid score (0.0-1.0)")
     score_components: ScoreComponents
     score_breakdown: ScoreBreakdown
@@ -91,6 +113,7 @@ class StudentMatchRecommendation(BaseModel):
 class StudentRecommendationsResponse(BaseModel):
     candidate_name: str
     registration_number: str
+    achievements: list[str] = Field(default_factory=list)
     recommendations: list[ProjectMatchRecommendation]
     refresh_queued: bool = False
     cached: bool = False

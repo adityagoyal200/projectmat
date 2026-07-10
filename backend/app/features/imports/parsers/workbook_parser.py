@@ -70,6 +70,16 @@ HEADER_ALIASES = {
         "project links",
         "portfolio links",
     ],
+    "skills": [
+        "skills",
+        "technical skills",
+        "tech skills",
+        "technologies",
+        "tech stack",
+        "key skills",
+        "skills/technologies",
+        "domain skills",
+    ],
     # Probable projects
     "project idea": ["project idea", "idea"],
     "author": ["author", "submitted by"],
@@ -81,7 +91,7 @@ SHEET_CONFIG = {
     "Students Info": {
         "aliases": ["students info", "students", "students_info"],
         "required": ["name", "registration number"],
-        "optional": ["email", "phone", "file"],
+        "optional": ["email", "phone", "file", "skills"],
     },
     "Mentors info": {
         "aliases": ["mentors info", "mentors", "mentors_info"],
@@ -293,6 +303,7 @@ def parse_workbook(file_content: bytes) -> ParsedWorkbook:
                 live_project_links = _get_val(
                     row, col_map, "live project links"
                 ) or _get_val(row, col_map, "live projects")
+                skills = _get_val(row, col_map, "skills")
 
                 raw_data = {
                     "name": name,
@@ -300,6 +311,7 @@ def parse_workbook(file_content: bytes) -> ParsedWorkbook:
                     "email": email,
                     "phone": phone,
                     "file": file,
+                    "skills": skills,
                     "github_username": github_username,
                     "leetcode_username": leetcode_username,
                     "codeforces_username": codeforces_username,

@@ -62,3 +62,30 @@ async def test_upload_invalid_file(client: AsyncClient):
 
     assert response.status_code == 400
     assert "Unsupported file type" in response.json()["detail"]
+
+
+@pytest.mark.anyio
+async def test_import_drive_resumes_api(client: AsyncClient, mock_db):
+    from unittest.mock import patch
+
+    from app.features.imports.models import ImportBatch, ImportFile
+
+    def assign_id(instance):
+        if isinstance(instance, ImportBatch):
+            instance.id = 5
+        elif isinstance(instance, ImportFile):
+            instance.id = 6
+
+    mock_db.add.side_effect = assign_id
+
+    # Mock asyncio.create_task to avoid running background download during integration test
+    with patch("app.features.imports.service.asyncio.create_task"):
+        response = await client.post(
+            "/api/import-batches/drive-resumes",
+            json={"resumes_url": "https://drive.google.com/mock-folder"},
+        )
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["id"] == 5
+    assert data["status"] == "parsing"

@@ -1,3 +1,6 @@
+import { Info } from 'lucide-react';
+
+import { Tooltip } from '@/components/ui/Tooltip';
 import { cn } from '@/lib/utils';
 
 interface ScoreBarProps {
@@ -6,6 +9,7 @@ interface ScoreBarProps {
   hint?: string;
   muted?: boolean;
   accent?: 'violet' | 'cyan' | 'emerald' | 'amber' | 'rose' | 'default';
+  explanation?: string;
 }
 
 const ACCENT_GRADIENTS: Record<string, string> = {
@@ -17,7 +21,7 @@ const ACCENT_GRADIENTS: Record<string, string> = {
   default: 'from-violet-500 to-cyan-400',
 };
 
-export function ScoreBar({ label, value, hint, muted, accent = 'default' }: ScoreBarProps) {
+export function ScoreBar({ label, value, hint, muted, accent = 'default', explanation }: ScoreBarProps) {
   const pct = Math.round(value * 100);
   const gradient = ACCENT_GRADIENTS[accent] ?? ACCENT_GRADIENTS.default;
 
@@ -29,7 +33,14 @@ export function ScoreBar({ label, value, hint, muted, accent = 'default' }: Scor
       )}
     >
       <div className="mb-2 flex items-center justify-between text-xs">
-        <span className="font-medium text-muted-foreground">{label}</span>
+        <div className="inline-flex items-center gap-1.5">
+          <span className="font-medium text-muted-foreground">{label}</span>
+          {explanation && (
+            <Tooltip wrapperClassName="inline-flex items-center cursor-help" panelClassName="w-60" content={explanation}>
+              <Info className="h-3 w-3 text-muted-foreground/50 transition-colors group-hover:text-muted-foreground" />
+            </Tooltip>
+          )}
+        </div>
         <span className="font-semibold tabular-nums text-foreground">{pct}%</span>
       </div>
       <div className="h-2 overflow-hidden rounded-full bg-secondary/80">

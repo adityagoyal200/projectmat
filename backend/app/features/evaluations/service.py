@@ -15,6 +15,7 @@ from app.features.candidates.models import Candidate
 from app.features.evaluations.codeforces_client import fetch_codeforces_metrics
 from app.features.evaluations.context_extractor import extract_project_requirements
 from app.features.evaluations.github_client import fetch_github_user_metrics
+from app.features.evaluations.kaggle_client import fetch_kaggle_metrics
 from app.features.evaluations.leetcode_client import fetch_leetcode_metrics
 from app.features.evaluations.live_app_evaluator import evaluate_live_app
 from app.features.evaluations.models import LiveAppEvaluation, RepositoryEvaluation
@@ -213,9 +214,14 @@ class EvaluationService:
             else:
                 tasks.append(asyncio.sleep(0, {}))
 
+            if candidate.kaggle_username:
+                tasks.append(fetch_kaggle_metrics(candidate.kaggle_username))
+            else:
+                tasks.append(asyncio.sleep(0, {}))
+
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
-            if len(results) == 4:
+            if len(results) == 5:
                 if isinstance(results[0], dict) and "fetch_error" not in results[0]:
                     candidate.github_metrics = results[0]
                     if (
@@ -229,6 +235,8 @@ class EvaluationService:
                     candidate.codeforces_metrics = results[2]
                 if isinstance(results[3], dict) and "fetch_error" not in results[3]:
                     candidate.scholar_metrics = results[3]
+                if isinstance(results[4], dict) and "fetch_error" not in results[4]:
+                    candidate.kaggle_metrics = results[4]
 
         if evaluate_links:
             # Clear stale evaluations before external agent invokes

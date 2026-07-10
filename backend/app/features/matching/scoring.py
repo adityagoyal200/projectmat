@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from app.config import settings
@@ -67,6 +67,13 @@ class DeveloperProfileScoreResult:
     repository_quality_score: float
     live_app_score: float
     detail: str
+    github_detail: str = ""
+    coding_profiles_detail: str = ""
+    achievements_detail: str = ""
+    # Per-repository review summaries (from the agy/repository-evaluation
+    # pipeline), surfaced so the UI can show whether repos were actually cloned
+    # and reviewed. Empty when that pipeline was never run for the candidate.
+    repository_evaluations: list[dict] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -99,6 +106,9 @@ class HybridScoreResult:
     prerequisite_detail: str
     resume_experience_detail: str
     developer_profile_detail: str
+    github_detail: str
+    coding_profiles_detail: str
+    achievements_detail: str
     preference_detail: str
     embedding_detail: str
     scoring_version: str
@@ -109,6 +119,10 @@ def compute_prerequisite_overlap(
     candidate_skills: list[str],
     prerequisites: list[str],
 ) -> PrerequisiteOverlapResult:
+    # Defensive: strip whitespace from inputs to handle dirty data
+    candidate_skills = [s.strip() for s in candidate_skills if s.strip()]
+    prerequisites = [p.strip() for p in prerequisites if p.strip()]
+
     if not prerequisites:
         return PrerequisiteOverlapResult(
             score=0.0,
@@ -182,14 +196,8 @@ def compute_resume_experience(
     domain_keywords: list[str] = []
     abstract_tokens = set(re.findall(r"[a-zA-Z]{3,}", (project_abstract or "").lower()))
     prereq_lower_set = {p.lower() for p in prerequisites}
-    for prereq in prerequisites:
-        if re.search(rf"\b{re.escape(prereq)}\b", text, re.IGNORECASE):
-            continue  # skip prereq tokens — overlap handles those
-        if prereq.lower() in abstract_tokens and re.search(
-            rf"\b{re.escape(prereq)}\b", text, re.IGNORECASE
-        ):
-            domain_keywords.append(prereq)
 
+    # Collect abstract tokens (excluding prereqs) that appear in the resume
     for token in list(abstract_tokens)[:15]:
         if len(token) < 4:
             continue
@@ -198,6 +206,13 @@ def compute_resume_experience(
             and token not in prereq_lower_set
         ):
             domain_keywords.append(token)
+
+    # Also credit prereqs that appear in both the project abstract and the resume
+    for prereq in prerequisites:
+        if prereq.lower() in abstract_tokens and re.search(
+            rf"\b{re.escape(prereq)}\b", text, re.IGNORECASE
+        ):
+            domain_keywords.append(prereq)
 
     domain_keywords = list(dict.fromkeys(domain_keywords))[:8]
 
@@ -287,6 +302,36 @@ def _average_scores(rows: list[Any] | None) -> float:
     if not scores:
         return 0.0
     return round(sum(scores) / len(scores), 4)
+
+
+def _attr(source: Any, key: str, default: Any = None) -> Any:
+    if isinstance(source, dict):
+        return source.get(key, default)
+    return getattr(source, key, default)
+
+
+def _summarize_repository_evaluations(rows: list[Any] | None) -> list[dict]:
+    """Compact, serializable summaries of each repository review so the UI can
+    show whether repos were actually cloned and reviewed. Handles both ORM rows
+    and plain dicts."""
+    if not rows:
+        return []
+    summaries: list[dict] = []
+    for row in rows:
+        logic = _attr(row, "github_logic_score")
+        findings = _attr(row, "findings") or []
+        summaries.append(
+            {
+                "repository_name": _attr(row, "repository_name"),
+                "repository_url": _attr(row, "repository_url") or "",
+                "status": _attr(row, "status") or "unknown",
+                "score": round(_metric(row, "score"), 4),
+                "logic_score": round(float(logic), 4) if logic is not None else None,
+                "findings_count": len(findings) if isinstance(findings, list) else 0,
+                "source": _attr(row, "source"),
+            }
+        )
+    return summaries
 
 
 def _achievement_count(achievements: dict | list | str | None) -> int:
@@ -480,6 +525,27 @@ def compute_developer_profile_score(
         f"(items={achievement_items}, citations={citations:.0f})."
     )
 
+    if github_score > 0:
+        # A score was earned from repos, metrics, or repository evaluations —
+        # describe it even when the profile username itself was never captured.
+        github_detail = f"Score derived from public repos ({public_repos:.0f}), stars ({total_stars:.0f}), repository quality ({repository_quality:.4f}), and live app ({live_app:.4f})."
+    elif not github_username and not github_repositories:
+        github_detail = "GitHub link was not provided."
+    else:
+        github_detail = "GitHub link provided, but no public repositories, stars, or recent activity found."
+
+    if coding_score == 0:
+        coding_detail = "No LeetCode, Codeforces, or Kaggle activity found."
+    else:
+        coding_detail = f"Score derived from LeetCode solved ({leetcode_solved:.0f}), Codeforces rating ({codeforces_rating:.0f}), and Kaggle medals ({kaggle_medals:.0f})."
+
+    if achievements_score == 0:
+        achievements_detail = (
+            "No notable achievements, citations, or publications found."
+        )
+    else:
+        achievements_detail = f"Score derived from achievements ({achievement_items}), citations ({citations:.0f}), and publications ({publications:.0f})."
+
     logger.debug(
         f"\n--- [SCORING ENGINE] Calculating Developer Profile Score for Candidate ---\n"
         f"  GitHub Username: {github_username or 'None'}\n"
@@ -505,6 +571,12 @@ def compute_developer_profile_score(
         repository_quality_score=repository_quality,
         live_app_score=live_app,
         detail=detail,
+        github_detail=github_detail,
+        coding_profiles_detail=coding_detail,
+        achievements_detail=achievements_detail,
+        repository_evaluations=_summarize_repository_evaluations(
+            repository_evaluations
+        ),
     )
 
 
@@ -639,6 +711,9 @@ def compute_hybrid_final_score(
         prerequisite_detail=prerequisite_overlap.detail,
         resume_experience_detail=resume_experience.detail,
         developer_profile_detail=profile.detail,
+        github_detail=profile.github_detail,
+        coding_profiles_detail=profile.coding_profiles_detail,
+        achievements_detail=profile.achievements_detail,
         preference_detail=preference_signal.detail,
         embedding_detail=embedding_detail,
         scoring_version=settings.SCORING_VERSION,

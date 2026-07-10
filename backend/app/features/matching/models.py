@@ -12,6 +12,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -138,4 +139,44 @@ class BatchPairScore(Base):
     preliminary_score: Mapped[float] = mapped_column(Float, nullable=False)
     computed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class MatchRecommendationCache(Base):
+    """Persisted full (LLM-evaluated) recommendation responses.
+
+    Recommendations are deterministic for a fixed batch (same students,
+    projects, and scoring version), so once computed they are cached and served
+    without re-running the LLM. One row per (batch, entity):
+
+    * ``cache_type="student"`` — projects ranked for one student
+      (``entity_key`` = registration number).
+    * ``cache_type="project"`` — students ranked for one project / mentor
+      (``entity_key`` = project id as string).
+
+    Rows are keyed by ``import_batch_id`` and cascade-deleted with the batch, so
+    a new upload (a new batch) never sees stale results; re-importing into an
+    existing batch clears the batch's rows explicitly.
+    """
+
+    __tablename__ = "match_recommendation_cache"
+    __table_args__ = (
+        UniqueConstraint(
+            "batch_id", "cache_type", "entity_key", name="uq_match_rec_cache"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    batch_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("import_batches.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    cache_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    entity_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    scoring_version: Mapped[str] = mapped_column(String(50), nullable=False)
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    computed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

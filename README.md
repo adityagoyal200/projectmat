@@ -138,8 +138,13 @@ Start here before implementing any phase:
 - `specs/tech-stack.md`
 - `specs/roadmap.md`
 - `specs/adrs/ADR-0001-standalone-bulk-intake-matching-mvp.md`
-- `specs/features/2026-06-26-bulk-intake-and-matching/requirements.md`
-- `specs/features/2026-06-30-repository-and-live-app-evaluation/requirements.md`
 - `specs/apis/bulk-intake-and-matching-api.md`
+- `specs/features/2026-06-26-data-model/requirements.md`
+- `specs/features/2026-06-26-bulk-workbook-import/requirements.md`
+- `specs/features/2026-06-26-bulk-intake-and-matching/requirements.md`
+- `specs/features/2026-06-27-in-memory-ingest-and-profile-normalization/requirements.md`
+- `specs/features/2026-06-28-symmetrical-matching-and-recommendation-apis/requirements.md`
+- `specs/features/2026-06-29-cohort-match-run-and-export/requirements.md`
+- `specs/features/2026-06-30-repository-and-live-app-evaluation/requirements.md`
 
 Architecture changes require an ADR before production code.

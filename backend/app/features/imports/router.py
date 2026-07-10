@@ -6,6 +6,7 @@ from app.dependencies import get_db
 from app.features.candidates.models import Candidate
 from app.features.imports.models import ImportBatch
 from app.features.imports.schemas import (
+    DriveResumesImportRequest,
     ImportBatchListItem,
     ImportBatchResponse,
     ImportBatchSummary,
@@ -112,3 +113,13 @@ async def attach_workbook_file(
         return await service.import_workbook(batch_id, file.filename, file_content)
     except ImportBatchNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/drive-resumes", response_model=ImportBatchSummary, status_code=201)
+async def import_drive_resumes(
+    request: DriveResumesImportRequest,
+    db: AsyncSession = Depends(get_db),
+) -> ImportBatchSummary:
+    """Create a batch and import resumes directly from a Drive link (no workbook)."""
+    service = WorkbookImportService(db)
+    return await service.import_drive_resumes(request.resumes_url)

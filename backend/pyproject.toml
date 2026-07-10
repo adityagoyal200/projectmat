@@ -8,7 +8,8 @@ ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
 "app/features/evaluations/cli.py" = ["T201"]
-"tests/**" = ["ARG001", "ARG002"]
+"scripts/*.py" = ["T201"]
+"scripts/tests/**" = ["ARG001", "ARG002"]
 
 [tool.ruff.lint.flake8-bugbear]
 extend-immutable-calls = [
@@ -31,7 +32,7 @@ extend-immutable-calls = [
 ]
 
 [tool.pyright]
-include = ["app", "tests"]
+include = ["app", "scripts"]
 exclude = ["**/__pycache__", ".venv"]
 pythonVersion = "3.11"
 venvPath = "."
@@ -44,6 +45,6 @@ reportOptionalMemberAccess = "warning"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["tests"]
+testpaths = ["scripts/tests"]
 python_files = ["test_*.py"]
 pythonpath = ["."]

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -8,6 +8,7 @@ from app.features.matching.exceptions import (
     MatchingUnavailableError,
 )
 from app.features.matching.llm_client import generate_chat_completion
+from app.features.matching.report import ReportRenderError
 from app.features.matching.schemas import (
     BatchScoreMatrixResponse,
     LlmPreviewRequest,
@@ -47,20 +48,77 @@ async def preview_llm(request: LlmPreviewRequest) -> LlmPreviewResponse:
     )
 
 
+@router.get("/report")
+async def download_match_report(
+    registration_number: str,
+    project_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Generate and download a PDF fit report for a candidate-project pair."""
+    service = MatchService(db)
+    try:
+        filename, pdf = await service.build_match_report(
+            registration_number=registration_number,
+            project_id=project_id,
+        )
+    except MatchingUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ReportRenderError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/batch-report/{batch_id}")
+async def download_batch_report(
+    batch_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Generate a whole-batch PDF: each student's top-2 projects with the
+    factor breakdown and rationale, compared against the mentor-selected
+    students recorded in the workbook.
+    """
+    service = MatchService(db)
+    try:
+        filename, pdf = await service.build_batch_report(batch_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except MatchingUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ReportRenderError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.get(
     "/student-recommendations/{registration_number}",
     response_model=StudentRecommendationsResponse,
 )
 async def get_student_recommendations(
     registration_number: str,
+    force: bool = False,
     db: AsyncSession = Depends(get_db),
 ) -> StudentRecommendationsResponse:
     """Retrieve ranked project recommendations for an existing candidate
     by registration number.
+
+    Results are cached per batch and served from the database on repeat calls.
+    Pass ?force=true to bypass the cache and recompute.
     """
     service = MatchService(db)
     try:
-        return await service.recommend_projects_for_db_candidate(registration_number)
+        return await service.recommend_projects_for_db_candidate(
+            registration_number, force=force
+        )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except MatchingUnavailableError as exc:
@@ -129,12 +187,17 @@ async def recommend_projects_for_new_student(
 )
 async def get_project_recommendations(
     project_id: int,
+    force: bool = False,
     db: AsyncSession = Depends(get_db),
 ) -> ProjectRecommendationsResponse:
-    """Retrieve ranked recommended candidates for a project by project ID."""
+    """Retrieve ranked recommended candidates for a project by project ID.
+
+    Results are cached per batch and served from the database on repeat calls.
+    Pass ?force=true to bypass the cache and recompute.
+    """
     service = MatchService(db)
     try:
-        return await service.recommend_candidates_for_project(project_id)
+        return await service.recommend_candidates_for_project(project_id, force=force)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except MatchingUnavailableError as exc:

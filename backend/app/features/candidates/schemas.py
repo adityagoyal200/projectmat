@@ -21,6 +21,7 @@ class CandidateSkillSchema(BaseModel):
 class CandidateResponse(BaseModel):
     id: int
     import_batch_id: int | None = None
+    source: str | None = None
     registration_number: str
     name: str
     email: str | None = None

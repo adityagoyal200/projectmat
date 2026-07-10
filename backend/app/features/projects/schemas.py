@@ -41,3 +41,11 @@ class ProjectResponse(BaseModel):
     preferences: list[ProjectPreferenceSchema] = []
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class DummyProjectCreate(BaseModel):
+    title: str
+    abstract: str | None = None
+    mentor_name: str
+    mentor_email: str
+    prerequisites: list[str] = []

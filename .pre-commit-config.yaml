@@ -33,7 +33,7 @@ repos:
 
       - id: pyright
         name: pyright
-        entry: .venv/Scripts/pyright.exe -p backend
+        entry: ./.venv/Scripts/pyright.exe -p backend
         language: system
         types: [python]
         pass_filenames: false

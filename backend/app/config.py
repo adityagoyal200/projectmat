@@ -34,18 +34,35 @@ class Settings(BaseSettings):
     MATCH_SIGNAL_CONCURRENCY: int = 8
     MATCH_RESPONSE_CACHE_TTL_SECONDS: int = 120
 
+    # Resume-upload parity: persist an uploaded applicant as a Candidate and run
+    # the same evaluation pipeline (metrics + deterministic repo/live-app review
+    # + agy agent) DB candidates use, so on-the-fly matches score identically.
+    # Disable to fall back to the lighter metrics-only path (no cloning/agy).
+    UPLOAD_APPLICANT_FULL_EVAL: bool = True
+    UPLOAD_APPLICANT_CLONE_REPOS: bool = True
+    UPLOAD_APPLICANT_MAX_REPOS: int = 3
+
     # Hybrid scoring v3 — deterministic-first (normalized at runtime)
-    SCORING_VERSION: str = "3.0.0"
-    SCORE_WEIGHT_EMBEDDING_SIMILARITY: float = 0.10
-    SCORE_WEIGHT_PREREQUISITE_OVERLAP: float = 0.15
-    SCORE_WEIGHT_RESUME_EXPERIENCE: float = 0.10
+    SCORING_VERSION: str = "3.1.0"
+    SCORE_WEIGHT_EMBEDDING_SIMILARITY: float = 0.15
+    SCORE_WEIGHT_PREREQUISITE_OVERLAP: float = 0.20
+    SCORE_WEIGHT_RESUME_EXPERIENCE: float = 0.20
     SCORE_WEIGHT_GITHUB: float = 0.30
-    SCORE_WEIGHT_CODING_PROFILES: float = 0.20
-    SCORE_WEIGHT_ACHIEVEMENTS: float = 0.10
+    SCORE_WEIGHT_CODING_PROFILES: float = 0.05
+    SCORE_WEIGHT_ACHIEVEMENTS: float = 0.05
     SCORE_WEIGHT_LLM_FIT: float = 0.05
 
     # GitHub API token for authenticated repo scanning (avoids rate-limits)
     GITHUB_TOKEN: str = ""
+    # Google API key with Drive API enabled — used to list/download public
+    # resume folders via the official Drive v3 API instead of gdown scraping.
+    GOOGLE_API_KEY: str = ""
+    # OAuth client credentials for Drive access (works for private folders).
+    # Run backend/scripts/authorize_google_drive.py once to obtain the
+    # refresh token, then requests authenticate automatically.
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+    GOOGLE_REFRESH_TOKEN: str = ""
     # GitLab API token for authenticated enterprise repository cloning
     GITLAB_TOKEN: str = ""
 

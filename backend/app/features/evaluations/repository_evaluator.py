@@ -88,9 +88,6 @@ def _finding(
 
 
 def _parse_repository_name(repository_url: str, local_path: Path | None = None) -> str:
-    if local_path is not None:
-        return local_path.name
-
     parsed = urlparse(repository_url)
     if parsed.netloc:
         path = parsed.path.strip("/")
@@ -100,6 +97,9 @@ def _parse_repository_name(repository_url: str, local_path: Path | None = None) 
             return f"{parts[0]}/{repo}"
         if parts and parts[0]:
             return parts[0].removesuffix(".git")
+
+    if local_path is not None:
+        return local_path.name
 
     return Path(repository_url).name
 

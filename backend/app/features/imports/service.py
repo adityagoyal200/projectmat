@@ -1,5 +1,7 @@
 import asyncio
 import re
+import uuid
+from pathlib import Path
 from typing import ClassVar, Literal, cast
 
 import structlog
@@ -22,6 +24,7 @@ from app.features.imports.schemas import (
     SheetSummary,
     ValidationIssueOut,
 )
+from app.features.imports.skills_vocabulary import SKILLS_VOCABULARY
 from app.features.mentors.models import Mentor
 from app.features.projects.models import Project, ProjectPreference, ProjectPrerequisite
 from app.features.shared.models import Skill
@@ -42,6 +45,156 @@ def _merge_unique_strings(existing: list[str] | None, incoming: list[str]) -> li
         seen.add(key)
         merged.append(cleaned)
     return merged
+
+
+_REGISTRATION_NUMBER_RE = re.compile(r"([A-Z]{3}\d{4,6})", re.IGNORECASE)
+
+
+async def _apply_resume_profiles_and_skills(
+    db: AsyncSession, candidate: Candidate, text: str
+) -> None:
+    """Merge developer-profile handles and extract skills from resume text.
+
+    Shared by the two resume ingestion paths: attaching resumes to workbook
+    candidates, and creating candidates directly from a Drive folder. Assumes
+    the caller has already stored/updated the candidate's resume document text.
+    """
+    profiles = extract_profiles(text)
+
+    candidate.github_username = candidate.github_username or profiles.github_username
+    candidate.leetcode_username = (
+        candidate.leetcode_username or profiles.leetcode_username
+    )
+    candidate.codeforces_username = (
+        candidate.codeforces_username or profiles.codeforces_username
+    )
+    candidate.kaggle_username = candidate.kaggle_username or profiles.kaggle_username
+    candidate.scholar_id = candidate.scholar_id or profiles.scholar_id
+    candidate.github_repositories = _merge_unique_strings(
+        candidate.github_repositories,
+        profiles.github_repositories,
+    )
+    candidate.live_project_links = _merge_unique_strings(
+        candidate.live_project_links,
+        profiles.live_links,
+    )
+    if profiles.achievements:
+        candidate.achievements = _merge_unique_strings(
+            list(candidate.achievements or []),
+            profiles.achievements,
+        )
+
+    res = await db.execute(select(Skill))
+    known_skills = res.scalars().all()
+    skills_by_lower = {s.name.strip().lower(): s for s in known_skills}
+
+    # Match against existing DB skills plus the curated vocabulary; only create
+    # Skill rows for keywords actually present in the resume text.
+    candidate_keywords = {s.name.strip() for s in known_skills}
+    candidate_keywords.update(kw.strip() for kw in SKILLS_VOCABULARY)
+
+    extracted_skills = []
+    for skill_name in candidate_keywords:
+        if not skill_name:
+            continue
+        pattern = rf"(?i)(?:^|[^\w]){re.escape(skill_name)}(?:[^\w]|$)"
+        if not re.search(pattern, text):
+            continue
+        skill_obj = skills_by_lower.get(skill_name.lower())
+        if not skill_obj:
+            skill_obj = Skill(name=skill_name)
+            db.add(skill_obj)
+            await db.flush()
+            skills_by_lower[skill_name.lower()] = skill_obj
+        extracted_skills.append(skill_obj)
+
+    for skill_obj in extracted_skills:
+        stmt = select(CandidateSkill).where(
+            CandidateSkill.candidate_id == candidate.id,
+            CandidateSkill.skill_id == skill_obj.id,
+        )
+        res = await db.execute(stmt)
+        if not res.scalars().first():
+            db.add(
+                CandidateSkill(
+                    candidate_id=candidate.id,
+                    skill_id=skill_obj.id,
+                    source="resume",
+                    confidence=1.0,
+                )
+            )
+
+
+async def _extract_identity_from_resume(text: str, filename: str) -> tuple[str, str]:
+    """Derive a candidate name and registration number from resume content.
+
+    Registration number is matched by regex over the resume text. The name is
+    read from the resume via the LLM when enabled, falling back to the first
+    plausible line and finally to the filename stem. Returns
+    ``(name, registration_number)``.
+    """
+    from app.features.matching.llm_client import generate_chat_completion
+
+    reg_match = _REGISTRATION_NUMBER_RE.search(text)
+    if reg_match:
+        registration_number = reg_match.group(1).upper()
+    else:
+        import uuid
+
+        registration_number = f"RES-{uuid.uuid4().hex[:12].upper()}"
+
+    name: str | None = None
+    snippet = text.strip()[:1500]
+    if snippet:
+        try:
+            result = await generate_chat_completion(
+                prompt=(
+                    "The text below is the top of a resume. Reply with ONLY the "
+                    "candidate's full name, nothing else. If no name is present, "
+                    'reply with "UNKNOWN".\n\n'
+                    f"{snippet}"
+                ),
+                system_prompt="You extract a person's full name from resume text.",
+            )
+            if not result.skipped and result.content:
+                candidate_name = result.content.strip().splitlines()[0].strip()
+                if (
+                    candidate_name
+                    and candidate_name.upper() != "UNKNOWN"
+                    and len(candidate_name) <= 120
+                ):
+                    name = candidate_name
+        except Exception as e:
+            logger.warning("Resume name extraction via LLM failed", error=str(e))
+
+    if not name:
+        for line in text.splitlines():
+            clean = line.strip()
+            # A resume header name: a couple of words, mostly alphabetic.
+            if (
+                2 <= len(clean) <= 60
+                and re.match(r"^[A-Za-z][A-Za-z.\-'\s]+$", clean)
+                and 1 <= len(clean.split()) <= 5
+            ):
+                name = clean
+                break
+
+    if not name:
+        stem = Path(filename).stem
+        name = re.sub(r"[_\-]+", " ", stem).strip() or "Unknown Candidate"
+
+    return name, registration_number
+
+
+def _build_sheet_summary(
+    parsed: ParsedWorkbook, sheet_name: str, total_rows: int
+) -> SheetSummary:
+    relevant = [i for i in parsed.issues if i.sheet_name == sheet_name]
+    return SheetSummary(
+        total_rows=total_rows,
+        errors=sum(1 for i in relevant if i.severity == "error"),
+        warnings=sum(1 for i in relevant if i.severity == "warning"),
+    )
 
 
 class ImportBatchNotFoundError(ValueError):
@@ -68,24 +221,25 @@ class WorkbookImportService:
         )
         db_issues = issues_res.scalars().all()
 
+        files_stmt = select(ImportFile).where(ImportFile.import_batch_id == batch.id)
+        files_res = await self.db.execute(files_stmt)
+        batch_files = files_res.scalars().all()
+        has_workbook = any(f.file_type == "workbook" for f in batch_files)
+        source = "drive" if (not has_workbook and batch.resumes_url) else "excel"
+
         if parsed is not None:
-
-            def _build_summary(sheet_name: str, total_rows: int) -> SheetSummary:
-                relevant = [i for i in parsed.issues if i.sheet_name == sheet_name]
-                return SheetSummary(
-                    total_rows=total_rows,
-                    errors=sum(1 for i in relevant if i.severity == "error"),
-                    warnings=sum(1 for i in relevant if i.severity == "warning"),
-                )
-
             sheet_summaries = {
-                "Students Info": _build_summary("Students Info", len(parsed.students)),
-                "Mentors info": _build_summary("Mentors info", len(parsed.mentors)),
-                "Mentors-projects": _build_summary(
-                    "Mentors-projects", len(parsed.mentor_projects)
+                "Students Info": _build_sheet_summary(
+                    parsed, "Students Info", len(parsed.students)
                 ),
-                "Probable projects": _build_summary(
-                    "Probable projects", len(parsed.probable_projects)
+                "Mentors info": _build_sheet_summary(
+                    parsed, "Mentors info", len(parsed.mentors)
+                ),
+                "Mentors-projects": _build_sheet_summary(
+                    parsed, "Mentors-projects", len(parsed.mentor_projects)
+                ),
+                "Probable projects": _build_sheet_summary(
+                    parsed, "Probable projects", len(parsed.probable_projects)
                 ),
             }
         else:
@@ -138,7 +292,21 @@ class WorkbookImportService:
                 for issue in db_issues
             ],
             candidates=[
-                ImportBatchCandidateItem.model_validate(candidate)
+                ImportBatchCandidateItem(
+                    id=candidate.id,
+                    import_batch_id=candidate.import_batch_id,
+                    registration_number=candidate.registration_number,
+                    name=candidate.name,
+                    email=candidate.email,
+                    phone=candidate.phone,
+                    github_username=candidate.github_username,
+                    leetcode_username=candidate.leetcode_username,
+                    codeforces_username=candidate.codeforces_username,
+                    kaggle_username=candidate.kaggle_username,
+                    scholar_id=candidate.scholar_id,
+                    live_project_links=candidate.live_project_links,
+                    source=source,
+                )
                 for candidate in candidates
             ],
             mentors=[
@@ -403,6 +571,34 @@ class WorkbookImportService:
                             for link in student_row.live_project_links.split(",")
                         ]
 
+                # Import workbook-listed skills as CandidateSkill records
+                if student_row.skills:
+                    skill_names_from_wb = [
+                        s.strip() for s in student_row.skills.split(",") if s.strip()
+                    ]
+                    for skill_name in skill_names_from_wb:
+                        stmt = select(Skill).where(Skill.name.ilike(skill_name))
+                        res = await self.db.execute(stmt)
+                        db_skill = res.scalars().first()
+                        if not db_skill:
+                            db_skill = Skill(name=skill_name)
+                            self.db.add(db_skill)
+                            await self.db.flush()
+                        stmt = select(CandidateSkill).where(
+                            CandidateSkill.candidate_id == db_candidate.id,
+                            CandidateSkill.skill_id == db_skill.id,
+                        )
+                        res = await self.db.execute(stmt)
+                        if not res.scalars().first():
+                            self.db.add(
+                                CandidateSkill(
+                                    candidate_id=db_candidate.id,
+                                    skill_id=db_skill.id,
+                                    source="workbook",
+                                    confidence=1.0,
+                                )
+                            )
+
                 if student_row.file:
                     stmt = select(CandidateDocument).where(
                         CandidateDocument.candidate_id == db_candidate.id,
@@ -426,6 +622,27 @@ class WorkbookImportService:
                 ]
             )
             batch.completed_candidates = batch.total_candidates
+
+            # Re-importing into an existing batch changes its students/projects,
+            # so any previously computed & cached match results or deterministic
+            # pair scores for this batch are now stale. Drop them; the next
+            # matching request recomputes and re-caches. (A brand-new upload is a
+            # new batch id, so it never had cache to begin with.)
+            from sqlalchemy import delete as sa_delete
+
+            from app.features.matching.models import (
+                BatchPairScore,
+                MatchRecommendationCache,
+            )
+
+            await self.db.execute(
+                sa_delete(MatchRecommendationCache).where(
+                    MatchRecommendationCache.batch_id == batch.id
+                )
+            )
+            await self.db.execute(
+                sa_delete(BatchPairScore).where(BatchPairScore.batch_id == batch.id)
+            )
 
             if parsed.resumes_url:
                 task = asyncio.create_task(
@@ -463,37 +680,56 @@ class WorkbookImportService:
             return
 
         async with async_session() as db:
-            for filename, file_bytes in resumes_data.items():
+            # Load this batch's candidates once for reg-number and name matching
+            batch_cands_res = await db.execute(
+                select(Candidate).where(Candidate.import_batch_id == batch_id)
+            )
+            batch_candidates = list(batch_cands_res.scalars().all())
+            reg_to_candidate = {
+                c.registration_number.upper(): c
+                for c in batch_candidates
+                if c.registration_number
+            }
+
+            def _match_candidate(filename: str) -> Candidate | None:
+                # 1. Registration number in filename (scoped to this batch)
                 match = re.search(
                     r"([A-Z]{3}\d{6}|[A-Z]{3}\d{5}|[A-Z]{3}\d{4})",
                     filename,
                     re.IGNORECASE,
-                )
-                if not match:
-                    match = re.search(r"([A-Z]+\d+)", filename, re.IGNORECASE)
+                ) or re.search(r"([A-Z]+\d+)", filename, re.IGNORECASE)
+                if match:
+                    candidate = reg_to_candidate.get(match.group(1).upper())
+                    if candidate:
+                        return candidate
 
-                if not match:
-                    logger.warn(
-                        "Could not extract registration number from resume filename",
-                        filename=filename,
-                    )
-                    continue
+                # 2. Fallback: candidate name tokens in the filename
+                fname_norm = re.sub(r"[^a-z0-9]", "", filename.lower())
+                best: Candidate | None = None
+                best_len = 0
+                for c in batch_candidates:
+                    if not c.name:
+                        continue
+                    tokens = [t for t in re.split(r"\s+", c.name.lower()) if len(t) > 2]
+                    if tokens and all(
+                        re.sub(r"[^a-z0-9]", "", t) in fname_norm for t in tokens
+                    ):
+                        name_len = sum(len(t) for t in tokens)
+                        if name_len > best_len:
+                            best, best_len = c, name_len
+                return best
 
-                reg_num = match.group(1).upper()
-
-                stmt = select(Candidate).where(Candidate.registration_number == reg_num)
-                res = await db.execute(stmt)
-                candidate = res.scalars().first()
+            for filename, file_bytes in resumes_data.items():
+                candidate = _match_candidate(filename)
                 if not candidate:
                     logger.warn(
-                        "Resume downloaded but candidate not found in database",
-                        reg_num=reg_num,
+                        "Could not match resume filename to any candidate in batch",
                         filename=filename,
+                        batch_id=batch_id,
                     )
                     continue
 
                 text = await loop.run_in_executor(None, parse_pdf_bytes, file_bytes)
-                profiles = extract_profiles(text)
 
                 stmt = select(CandidateDocument).where(
                     CandidateDocument.candidate_id == candidate.id,
@@ -513,85 +749,171 @@ class WorkbookImportService:
                     db_doc.parse_status = "parsed"
                     db_doc.parsed_text = text
 
-                candidate.github_username = (
-                    candidate.github_username or profiles.github_username
-                )
-                candidate.leetcode_username = (
-                    candidate.leetcode_username or profiles.leetcode_username
-                )
-                candidate.codeforces_username = (
-                    candidate.codeforces_username or profiles.codeforces_username
-                )
-                candidate.kaggle_username = (
-                    candidate.kaggle_username or profiles.kaggle_username
-                )
-                candidate.scholar_id = candidate.scholar_id or profiles.scholar_id
-                candidate.github_repositories = _merge_unique_strings(
-                    candidate.github_repositories,
-                    profiles.github_repositories,
-                )
-                candidate.live_project_links = _merge_unique_strings(
-                    candidate.live_project_links,
-                    profiles.live_links,
-                )
-                if profiles.achievements:
-                    existing_achievements = list(candidate.achievements or [])
-                    candidate.achievements = _merge_unique_strings(
-                        existing_achievements,
-                        profiles.achievements,
-                    )
-
-                stmt = select(Skill)
-                res = await db.execute(stmt)
-                known_skills = res.scalars().all()
-
-                keywords_to_check = {s.name: s for s in known_skills}
-                common_keywords = [
-                    "Python",
-                    "PyTorch",
-                    "TensorFlow",
-                    "Machine Learning",
-                    "Deep Learning",
-                    "SQL",
-                    "Java",
-                    "C++",
-                    "R ",
-                    "React",
-                    "Node.js",
-                    "Docker",
-                    "AWS",
-                    "Git",
-                ]
-                for kw in common_keywords:
-                    if kw not in keywords_to_check:
-                        new_skill = Skill(name=kw)
-                        db.add(new_skill)
-                        await db.flush()
-                        keywords_to_check[kw] = new_skill
-
-                extracted_skills = []
-                for skill_name, skill_obj in keywords_to_check.items():
-                    pattern = rf"\b{re.escape(skill_name)}\b"
-                    if re.search(pattern, text, re.IGNORECASE):
-                        extracted_skills.append(skill_obj)
-
-                for skill_obj in extracted_skills:
-                    stmt = select(CandidateSkill).where(
-                        CandidateSkill.candidate_id == candidate.id,
-                        CandidateSkill.skill_id == skill_obj.id,
-                    )
-                    res = await db.execute(stmt)
-                    if not res.scalars().first():
-                        cs = CandidateSkill(
-                            candidate_id=candidate.id,
-                            skill_id=skill_obj.id,
-                            source="resume",
-                            confidence=1.0,
-                        )
-                        db.add(cs)
+                await _apply_resume_profiles_and_skills(db, candidate, text)
 
             await db.commit()
             logger.info(
                 "Successfully ingested resumes in background for batch",
                 batch_id=batch_id,
             )
+
+    async def import_drive_resumes(self, resumes_url: str) -> ImportBatchSummary:
+        """Create a batch from a Drive folder of resumes (no workbook).
+
+        Each resume becomes a Candidate whose identity is parsed from the PDF
+        content. These drive-sourced candidates are matched only against dummy
+        (batch-less) projects. The download/parse work runs in the background;
+        poll ``GET /api/import-batches/{id}`` for progress.
+        """
+        batch = ImportBatch(status="parsing", resumes_url=resumes_url)
+        self.db.add(batch)
+        await self.db.flush()
+
+        import_file = ImportFile(
+            import_batch_id=batch.id,
+            file_name=resumes_url,
+            file_type="drive_resumes",
+            status="uploaded",
+        )
+        self.db.add(import_file)
+        await self.db.commit()
+        await self.db.refresh(batch)
+
+        task = asyncio.create_task(
+            self.ingest_resume_folder_as_candidates(batch.id, resumes_url)
+        )
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+
+        return ImportBatchSummary(
+            id=batch.id,
+            status=cast(
+                Literal["created", "parsing", "validated", "failed"], batch.status
+            ),
+        )
+
+    async def ingest_resume_folder_as_candidates(self, batch_id: int, resumes_url: str):
+        """Download a Drive folder and create one Candidate per resume.
+
+        Unlike :meth:`ingest_resumes_background_task`, which attaches resumes to
+        candidates already present in the batch, this creates candidates from
+        scratch — identity parsed from resume content — for a workbook-less
+        import.
+        """
+        from app.database import async_session
+        from app.features.imports.drive_downloader import (
+            download_resumes_from_drive,
+            parse_pdf_bytes,
+        )
+
+        loop = asyncio.get_running_loop()
+        try:
+            resumes_data = await loop.run_in_executor(
+                None, download_resumes_from_drive, resumes_url
+            )
+        except Exception as e:
+            logger.error(
+                "Drive download failed for resume folder",
+                batch_id=batch_id,
+                error=str(e),
+            )
+            resumes_data = {}
+
+        async with async_session() as db:
+            batch = await db.get(ImportBatch, batch_id)
+            if batch is None:
+                logger.error(
+                    "Batch vanished before resume ingestion", batch_id=batch_id
+                )
+                return
+
+            if not resumes_data:
+                logger.warn(
+                    "No resumes found or downloaded from drive", batch_id=batch_id
+                )
+                batch.status = "failed"
+                await db.commit()
+                return
+
+            # Publish the target count up front so the UI can show progress, and
+            # commit each candidate as it is created. Incremental commits keep
+            # partial progress durable if the task is interrupted (e.g. a dev
+            # server reload) instead of losing the whole batch on rollback.
+            batch.total_candidates = len(resumes_data)
+            batch.completed_candidates = 0
+            await db.commit()
+
+            created = 0
+            try:
+                for filename, file_bytes in resumes_data.items():
+                    try:
+                        text = await loop.run_in_executor(
+                            None, parse_pdf_bytes, file_bytes
+                        )
+                        if not text.strip():
+                            logger.warn(
+                                "Skipping resume with no extractable text",
+                                filename=filename,
+                                batch_id=batch_id,
+                            )
+                            continue
+
+                        # Only the name is taken from the resume. Drive imports
+                        # always get a synthetic RES- id: reg numbers scraped
+                        # from resume text are unreliable and, when they look
+                        # like roster ids (e.g. "MDS2025"), make Drive students
+                        # indistinguishable from Excel students.
+                        name, _ = await _extract_identity_from_resume(text, filename)
+                        registration_number = f"RES-{uuid.uuid4().hex[:12].upper()}"
+
+                        candidate = Candidate(
+                            import_batch_id=batch_id,
+                            registration_number=registration_number,
+                            name=name,
+                            evaluation_status="Pending",
+                        )
+                        candidate.documents.append(
+                            CandidateDocument(
+                                document_type="resume",
+                                parse_status="parsed",
+                                parsed_text=text,
+                            )
+                        )
+                        db.add(candidate)
+                        await db.flush()
+
+                        await _apply_resume_profiles_and_skills(db, candidate, text)
+                        created += 1
+                        batch.completed_candidates = created
+                        await db.commit()
+                    except Exception as e:
+                        # One bad resume must not abort the whole import.
+                        await db.rollback()
+                        logger.warning(
+                            "Failed to ingest a resume; skipping",
+                            filename=filename,
+                            batch_id=batch_id,
+                            error=str(e),
+                        )
+                        batch = await db.get(ImportBatch, batch_id)
+                        if batch is None:
+                            return
+
+                batch.status = "validated" if created else "failed"
+                await db.commit()
+                logger.info(
+                    "Created candidates from Drive resume folder",
+                    batch_id=batch_id,
+                    count=created,
+                )
+            except Exception as e:
+                await db.rollback()
+                logger.error(
+                    "Drive resume ingestion failed",
+                    batch_id=batch_id,
+                    error=str(e),
+                )
+                batch = await db.get(ImportBatch, batch_id)
+                if batch is not None:
+                    batch.status = "validated" if created else "failed"
+                    await db.commit()

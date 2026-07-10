@@ -320,9 +320,11 @@ Completed.
 - Endpoint returns a valid PDF for a real candidate–project pair (verified end-to-end).
 - LLM failure degrades to a deterministic factor-only PDF instead of a `500`.
 - OpenAPI docs expose the endpoint; backend/frontend lint clean.
-- _Open:_ automated unit/integration tests for the report are not yet written; the
-  analysis call has no retry (a transient LLM failure silently yields the empty
-  skeleton). See `specs/features/2026-07-03-candidate-project-fit-report/`.
+- Unit + integration tests cover the report logic, retry semantics, and `404`/`503`
+  paths (`tests/unit/test_report.py`, `tests/integration/test_matching_api.py`); the
+  analysis call retries transient LLM failures before falling back to the deterministic
+  skeleton. Deferred: a full `200` happy-path integration test.
+  See `specs/features/2026-07-03-candidate-project-fit-report/`.
 
 ### Dependencies
 

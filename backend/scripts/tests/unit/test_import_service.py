@@ -56,14 +56,24 @@ async def test_ingest_resumes_extracts_missing_profiles_from_resume_text():
         "document": resume_doc,
     }
 
+    call_counter = {"n": 0}
+
     def execute_side_effect(*_args, **_kwargs):
+        call_counter["n"] += 1
         result = MagicMock()
         scalar_result = MagicMock()
-        scalar_result.first.side_effect = [
-            candidate_lookup["candidate"],
-            candidate_lookup["document"],
-        ]
-        scalar_result.all.return_value = []
+        if call_counter["n"] == 1:
+            # Batch candidate list for filename matching
+            scalar_result.all.return_value = [candidate_lookup["candidate"]]
+            scalar_result.first.return_value = None
+        elif call_counter["n"] == 2:
+            # CandidateDocument lookup
+            scalar_result.first.return_value = candidate_lookup["document"]
+            scalar_result.all.return_value = []
+        else:
+            # Skill select / CandidateSkill lookups
+            scalar_result.first.return_value = None
+            scalar_result.all.return_value = []
         result.scalars.return_value = scalar_result
         return result
 
@@ -155,3 +165,26 @@ async def test_service_parses_workbook_and_persists_issues(_mock_create_task, mo
     assert mock_db.flush.called
     assert mock_db.commit.called
     assert mock_db.refresh.called
+
+
+@pytest.mark.anyio
+@patch("app.features.matching.llm_client.generate_chat_completion")
+async def test_extract_identity_from_resume(mock_chat_completion):
+    from app.features.imports.service import _extract_identity_from_resume
+
+    # Mock LLM being skipped/unavailable
+    mock_result = MagicMock()
+    mock_result.skipped = True
+    mock_chat_completion.return_value = mock_result
+
+    # 1. Reg number match and fallback name matching
+    text = "MDS202505\nJohn Doe"
+    name, reg = await _extract_identity_from_resume(text, "john_doe.pdf")
+    assert reg == "MDS202505"
+    assert name == "John Doe"
+
+    # 2. No reg number in text -> synthetic RES-<uuid> should be generated
+    text = "Jane Smith\nPython Developer"
+    name, reg = await _extract_identity_from_resume(text, "jane_smith.pdf")
+    assert reg.startswith("RES-")
+    assert name == "Jane Smith"

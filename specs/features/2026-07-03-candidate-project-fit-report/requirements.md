@@ -239,10 +239,13 @@ Rules honored:
 - Generated text is grounded in the resume and the computed factor scores.
 - Provider failure has a tested-in-practice fallback (deterministic skeleton).
 
-**Known limitation:** the analysis call has no retry (unlike the evaluation path's
-2-attempt retry). A single transient LLM failure (429/timeout) silently degrades the
-report to the empty skeleton while still returning `200`. See `validation.md` and Open
-Questions.
+**Resolved (2026-07-07):** the analysis call now retries a bounded number of times
+(`_ANALYSIS_MAX_ATTEMPTS = 3`, linear backoff) on transient failures — a provider
+error, an empty body, or an unparseable response are all retried, while a _skipped_
+result (LLM disabled/unconfigured) is not retried. Only after exhausting the retries
+does it fall back to the deterministic skeleton, so a single transient 429/timeout no
+longer silently produces an empty report. The endpoint still returns `200` with the
+factor-only PDF as the terminal fallback rather than erroring.
 
 ---
 
@@ -279,9 +282,14 @@ None.
 | Unit        | `build_report_html` with a populated analysis       | Contains every section heading and escapes user text.           |
 | Unit        | `generate_improvement_analysis` when the LLM raises | Returns the deterministic skeleton (no exception).              |
 
-See `validation.md` for the full plan. **Current state:** the endpoint and rendering
-are verified manually end-to-end (a 3-page PDF for `MDS202537` × project 6); automated
-tests for this feature are not yet written (tracked as a gap).
+See `validation.md` for the full plan. **Current state:** `tests/unit/test_report.py`
+covers `build_report_html` (all sections + HTML escaping) and the retry semantics of
+`generate_improvement_analysis` (success, skip-without-retry, retry-then-succeed,
+fallback-after-exhaustion); `tests/integration/test_matching_api.py` covers the `404`
+(candidate not found) and `503` (LLM unavailable) paths. The `200` happy path is
+verified manually end-to-end (a 3-page PDF for `MDS202537` × project 6); a full `200`
+integration test is deferred because it requires mocking the entire scoring +
+developer-profile + PDF-render pipeline.
 
 ---
 
@@ -289,9 +297,9 @@ tests for this feature are not yet written (tracked as a gap).
 
 - [x] Architecture approved (reuses ADR-0001; no new dependency).
 - [x] Endpoint returns correct status codes and a PDF body.
-- [ ] Service method has unit tests. _(gap — not yet written)_
-- [ ] Endpoint has an integration test. _(gap — not yet written)_
-- [x] AI fallback behavior exists (deterministic skeleton).
+- [x] Report logic has unit tests (`tests/unit/test_report.py`: HTML sections/escaping + retry semantics).
+- [x] Endpoint has integration tests for the `404` and `503` paths; the `200` happy path is verified manually (full `200` integration test deferred).
+- [x] AI fallback behavior exists (bounded retry, then deterministic skeleton).
 - [x] No Alembic migration required.
 - [x] FastAPI OpenAPI docs expose the endpoint.
 - [ ] README / `.env.example` updated if setup changed. _(no new env vars)_
@@ -304,10 +312,10 @@ tests for this feature are not yet written (tracked as a gap).
 
 ## 15. Open Questions
 
-| Question                                                                                                        | Owner    | Resolution Date | Decision                                                                                  |
-| --------------------------------------------------------------------------------------------------------------- | -------- | --------------- | ----------------------------------------------------------------------------------------- |
-| Should the analysis call retry on transient LLM failure instead of silently falling back to the empty skeleton? | matching | Open            | Proposed: add backoff retry (mirror the eval path) or return `503` so the caller retries. |
-| Should generated reports be persisted/emailable?                                                                | product  | Open            | Deferred to Post-MVP.                                                                     |
+| Question                                                                                                        | Owner    | Resolution Date | Decision                                                                                                                                                             |
+| --------------------------------------------------------------------------------------------------------------- | -------- | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Should the analysis call retry on transient LLM failure instead of silently falling back to the empty skeleton? | matching | 2026-07-07      | Resolved: added bounded backoff retry (3 attempts) for provider/parse/empty failures; skipped (disabled) LLM is not retried; skeleton remains the terminal fallback. |
+| Should generated reports be persisted/emailable?                                                                | product  | Open            | Deferred to Post-MVP.                                                                                                                                                |
 
 ---
 
