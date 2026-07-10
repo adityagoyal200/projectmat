@@ -2,6 +2,7 @@ import asyncio
 import re
 import time
 import uuid
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import cast
@@ -159,6 +160,18 @@ class _PairSignals:
     resume_experience: ResumeExperienceResult
     preference_signal: PreferenceSignalResult
     preliminary_score: float
+
+
+@dataclass
+class _StudentPrep:
+    """Shared setup for a student's recommendations, computed once and used by
+    both the blocking and streaming paths so they run identical logic."""
+
+    candidate_skills: list[str]
+    resume_text: str
+    developer_profile: DeveloperProfileScoreResult
+    staged: list[tuple["Project", _PairSignals]]
+    finalist_ids: set[int]
 
 
 class MatchService:
@@ -1201,6 +1214,47 @@ class MatchService:
 
         self._ensure_llm_ready()
 
+        prep = await self._prepare_student_recommendation(
+            candidate, registration_number
+        )
+
+        # Stage 2: LLM only for top-K
+        sem = asyncio.Semaphore(settings.MATCH_SIGNAL_CONCURRENCY)
+        tasks = [
+            self._eval_student_project(
+                candidate=candidate,
+                prep=prep,
+                project=project,
+                signals=signals,
+                sem=sem,
+            )
+            for project, signals in prep.staged
+        ]
+        recommendations = list(await asyncio.gather(*tasks))
+
+        recommendations.sort(key=lambda r: r.final_score, reverse=True)
+        for idx, rec in enumerate(recommendations, start=1):
+            recommendations[idx - 1] = rec.model_copy(update={"rank": idx})
+
+        response = StudentRecommendationsResponse(
+            candidate_name=cast(str, candidate.name),
+            registration_number=registration_number,
+            achievements=list(candidate.achievements or []),
+            recommendations=recommendations,
+            cached=False,
+        )
+        await self._store_cached_recommendation(
+            batch_id, "student", registration_number, response.model_dump(mode="json")
+        )
+        return response
+
+    async def _prepare_student_recommendation(
+        self, candidate: Candidate, registration_number: str
+    ) -> _StudentPrep:
+        """Deterministic Stage-1 setup shared by the blocking and streaming
+        student-recommendation paths: resolve skills, ensure metrics and repo
+        evaluations, compute the developer profile, load the candidate's
+        projects, score every pair, and pick the top-K LLM finalists."""
         workbook_skills = [cs.skill.name for cs in candidate.skills if cs.skill]
         doc = next(
             (d for d in candidate.documents if d.document_type == "resume"), None
@@ -1271,80 +1325,219 @@ class MatchService:
         top_k = settings.MATCH_LLM_TOP_K
         finalist_ids = {cast(int, p.id) for p, _ in staged[:top_k]}
 
-        # Stage 2: LLM only for top-K
-        sem = asyncio.Semaphore(settings.MATCH_SIGNAL_CONCURRENCY)
+        return _StudentPrep(
+            candidate_skills=candidate_skills,
+            resume_text=resume_text,
+            developer_profile=developer_profile,
+            staged=staged,
+            finalist_ids=finalist_ids,
+        )
 
-        async def eval_project(project, signals) -> ProjectMatchRecommendation:
-            eval_res = None
-            if cast(int, project.id) in finalist_ids:
-                prereqs = [p.skill.name for p in project.prerequisites if p.skill]
-                async with sem:
-                    try:
-                        eval_res = await generate_project_match_for_student(
-                            candidate_name=cast(str, candidate.name),
-                            candidate_skills=candidate_skills,
-                            resume_text=resume_text,
-                            project_title=cast(str, project.title),
-                            project_abstract=cast(str, project.abstract or ""),
-                            prerequisites=prereqs,
-                            preferences=[
-                                p.preference_value for p in project.preferences
-                            ],
-                            preliminary_context=self._preliminary_context(signals),
-                        )
-                    except Exception as e:
-                        logger.warning(
-                            "LLM evaluation failed for project, falling back to preliminary score",
-                            project_id=project.id,
-                            error=str(e),
-                        )
-                        eval_res = {
-                            "llm_error": True,
-                            "technical_readiness": "LLM evaluation failed.",
-                            "growth_potential": "LLM evaluation failed.",
-                            "interest_alignment": "LLM evaluation failed.",
-                            "explanation": f"LLM evaluation failed due to provider error: {e}. Preliminary ranking used.",
-                            "readiness": 0.0,
-                            "growth_potential_score": 0.0,
-                            "interest": 0.0,
-                            "semantic_fit": 0.0,
-                            "scoring_rationale": f"LLM evaluation failed with error: {e}",
-                            "missing_prerequisites": [],
-                            "compensating_skills": [],
-                            "llm_provider": settings.LLM_PROVIDER,
-                            "llm_model": {
-                                "ollama": settings.OLLAMA_MODEL,
-                                "openai": settings.OPENAI_MODEL,
-                                "groq": settings.GROQ_MODEL,
-                            }.get(settings.LLM_PROVIDER),
-                        }
-            return self._build_project_recommendation(
+    async def _eval_student_project(
+        self,
+        *,
+        candidate: Candidate,
+        prep: _StudentPrep,
+        project,
+        signals: _PairSignals,
+        sem: asyncio.Semaphore,
+    ) -> ProjectMatchRecommendation:
+        """Evaluate one project for a candidate: run the LLM when the project is
+        a top-K finalist, otherwise keep the deterministic preliminary score."""
+        eval_res = None
+        if cast(int, project.id) in prep.finalist_ids:
+            prereqs = [p.skill.name for p in project.prerequisites if p.skill]
+            async with sem:
+                try:
+                    eval_res = await generate_project_match_for_student(
+                        candidate_name=cast(str, candidate.name),
+                        candidate_skills=prep.candidate_skills,
+                        resume_text=prep.resume_text,
+                        project_title=cast(str, project.title),
+                        project_abstract=cast(str, project.abstract or ""),
+                        prerequisites=prereqs,
+                        preferences=[p.preference_value for p in project.preferences],
+                        preliminary_context=self._preliminary_context(signals),
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "LLM evaluation failed for project, falling back to preliminary score",
+                        project_id=project.id,
+                        error=str(e),
+                    )
+                    eval_res = {
+                        "llm_error": True,
+                        "technical_readiness": "LLM evaluation failed.",
+                        "growth_potential": "LLM evaluation failed.",
+                        "interest_alignment": "LLM evaluation failed.",
+                        "explanation": f"LLM evaluation failed due to provider error: {e}. Preliminary ranking used.",
+                        "readiness": 0.0,
+                        "growth_potential_score": 0.0,
+                        "interest": 0.0,
+                        "semantic_fit": 0.0,
+                        "scoring_rationale": f"LLM evaluation failed with error: {e}",
+                        "missing_prerequisites": [],
+                        "compensating_skills": [],
+                        "llm_provider": settings.LLM_PROVIDER,
+                        "llm_model": {
+                            "ollama": settings.OLLAMA_MODEL,
+                            "openai": settings.OPENAI_MODEL,
+                            "groq": settings.GROQ_MODEL,
+                        }.get(settings.LLM_PROVIDER),
+                    }
+        return self._build_project_recommendation(
+            rank=0,
+            project=project,
+            signals=signals,
+            eval_res=eval_res,
+            developer_profile=prep.developer_profile,
+            achievements=list(candidate.achievements or []),
+        )
+
+    async def stream_recommend_projects_for_db_candidate(
+        self, registration_number: str, force: bool = False
+    ) -> AsyncIterator[dict]:
+        """Streaming variant of recommend_projects_for_db_candidate.
+
+        Yields event dicts as computation progresses so the UI can render the
+        ranked list immediately and fill in LLM scores per project as each
+        finishes:
+          * {"type": "meta", ...}    - candidate + finalist ids
+          * {"type": "prelim", ...}  - all projects, preliminary scoring
+          * {"type": "update", ...}  - one finalist, LLM-evaluated (repeated)
+          * {"type": "done", ...}    - final ranked list (authoritative)
+
+        A cache hit streams meta + done immediately (no recompute).
+        """
+        stmt = (
+            select(Candidate)
+            .options(
+                selectinload(Candidate.skills).selectinload(CandidateSkill.skill),
+                selectinload(Candidate.documents),
+                selectinload(Candidate.repository_evaluations),
+                selectinload(Candidate.live_app_evaluations),
+            )
+            .where(Candidate.registration_number == registration_number)
+        )
+        res = await self.db.execute(stmt)
+        candidate = res.scalars().first()
+        if not candidate:
+            raise ValueError(
+                f"Candidate with registration number {registration_number} not found."
+            )
+
+        batch_id = cast("int | None", candidate.import_batch_id)
+        if not force:
+            cached = await self._load_cached_recommendation(
+                batch_id, "student", registration_number
+            )
+            if cached is not None:
+                response = StudentRecommendationsResponse.model_validate(cached)
+                response.cached = True
+                yield {
+                    "type": "meta",
+                    "candidate_name": response.candidate_name,
+                    "registration_number": registration_number,
+                    "achievements": response.achievements,
+                    "total": len(response.recommendations),
+                    "finalist_ids": [],
+                    "cached": True,
+                }
+                yield {
+                    "type": "done",
+                    "cached": True,
+                    "response": response.model_dump(mode="json"),
+                }
+                return
+
+        self._ensure_llm_ready()
+
+        prep = await self._prepare_student_recommendation(
+            candidate, registration_number
+        )
+        achievements = list(candidate.achievements or [])
+
+        # Emit the fast, deterministic list immediately. Finalists carry their
+        # preliminary score until their LLM result arrives via "update" below.
+        prelim_by_project: dict[int, ProjectMatchRecommendation] = {
+            cast(int, project.id): self._build_project_recommendation(
                 rank=0,
                 project=project,
                 signals=signals,
-                eval_res=eval_res,
-                developer_profile=developer_profile,
-                achievements=list(candidate.achievements or []),
+                eval_res=None,
+                developer_profile=prep.developer_profile,
+                achievements=achievements,
             )
+            for project, signals in prep.staged
+        }
 
-        tasks = [eval_project(p, s) for p, s in staged]
-        recommendations = list(await asyncio.gather(*tasks))
+        def _ranked(
+            recs: list[ProjectMatchRecommendation],
+        ) -> list[ProjectMatchRecommendation]:
+            ordered = sorted(recs, key=lambda r: r.final_score, reverse=True)
+            return [
+                rec.model_copy(update={"rank": idx})
+                for idx, rec in enumerate(ordered, start=1)
+            ]
 
-        recommendations.sort(key=lambda r: r.final_score, reverse=True)
-        for idx, rec in enumerate(recommendations, start=1):
-            recommendations[idx - 1] = rec.model_copy(update={"rank": idx})
+        prelim_sorted = _ranked(list(prelim_by_project.values()))
 
+        yield {
+            "type": "meta",
+            "candidate_name": cast(str, candidate.name),
+            "registration_number": registration_number,
+            "achievements": achievements,
+            "total": len(prep.staged),
+            "finalist_ids": sorted(prep.finalist_ids),
+            "cached": False,
+        }
+        yield {
+            "type": "prelim",
+            "recommendations": [r.model_dump(mode="json") for r in prelim_sorted],
+        }
+
+        # Evaluate finalists concurrently, emitting each as it completes.
+        sem = asyncio.Semaphore(settings.MATCH_SIGNAL_CONCURRENCY)
+        finalist_pairs = [
+            (project, signals)
+            for project, signals in prep.staged
+            if cast(int, project.id) in prep.finalist_ids
+        ]
+
+        async def _run(project, signals) -> tuple[int, ProjectMatchRecommendation]:
+            rec = await self._eval_student_project(
+                candidate=candidate,
+                prep=prep,
+                project=project,
+                signals=signals,
+                sem=sem,
+            )
+            return cast(int, project.id), rec
+
+        for coro in asyncio.as_completed([_run(p, s) for p, s in finalist_pairs]):
+            pid, rec = await coro
+            prelim_by_project[pid] = rec
+            yield {
+                "type": "update",
+                "recommendation": rec.model_dump(mode="json"),
+            }
+
+        recommendations = _ranked(list(prelim_by_project.values()))
         response = StudentRecommendationsResponse(
             candidate_name=cast(str, candidate.name),
             registration_number=registration_number,
-            achievements=list(candidate.achievements or []),
+            achievements=achievements,
             recommendations=recommendations,
             cached=False,
         )
         await self._store_cached_recommendation(
             batch_id, "student", registration_number, response.model_dump(mode="json")
         )
-        return response
+        yield {
+            "type": "done",
+            "cached": False,
+            "response": response.model_dump(mode="json"),
+        }
 
     async def _materialize_and_evaluate_applicant(
         self,

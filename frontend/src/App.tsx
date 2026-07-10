@@ -24,6 +24,7 @@ import { CardContent, CardDescription, CardHeader, CardTitle } from '@/component
 import { Input } from '@/components/ui/input';
 import client from '@/lib/api/client';
 import { downloadBatchReport } from '@/lib/api/report';
+import { streamMatchEvents } from '@/lib/api/stream';
 import { cn } from '@/lib/utils';
 import type {
   BatchScoreMatrixResponse,
@@ -414,13 +415,31 @@ export default function App() {
     if (!selectedCandidateReg) return;
     setMatchingLoading(true);
     setMatchError(null);
-    if (!force) setCandidateRecommendations([]);
+    setCandidateRecommendations([]);
     try {
-      const res = await client.get<StudentRecommendationsResponse>(
-        `/matching/student-recommendations/${selectedCandidateReg}${force ? '?force=true' : ''}`
+      // Stream results: render the deterministic ranked list immediately, then
+      // fill in each project's LLM score as it finishes computing.
+      await streamMatchEvents(
+        `/matching/student-recommendations/${selectedCandidateReg}/stream${force ? '?force=true' : ''}`,
+        (evt) => {
+          if (evt.type === 'meta') {
+            setStudentMatchContext({ candidateName: evt.candidate_name, registrationNumber: evt.registration_number, cached: evt.cached });
+          } else if (evt.type === 'prelim') {
+            setCandidateRecommendations(evt.recommendations);
+          } else if (evt.type === 'update') {
+            setCandidateRecommendations((prev) => {
+              const merged = prev.map((r) => (r.project_id === evt.recommendation.project_id ? evt.recommendation : r));
+              merged.sort((a, b) => b.final_score - a.final_score);
+              return merged.map((r, i) => ({ ...r, rank: i + 1 }));
+            });
+          } else if (evt.type === 'done') {
+            setCandidateRecommendations(evt.response.recommendations);
+            setStudentMatchContext({ candidateName: evt.response.candidate_name, registrationNumber: evt.response.registration_number, cached: evt.response.cached ?? false });
+          } else if (evt.type === 'error') {
+            setMatchError(evt.message);
+          }
+        }
       );
-      setCandidateRecommendations(res.data.recommendations);
-      setStudentMatchContext({ candidateName: res.data.candidate_name, registrationNumber: res.data.registration_number, cached: res.data.cached ?? false });
     } catch (e: unknown) {
       setMatchError(e instanceof Error ? e.message : 'Matching failed');
     } finally {

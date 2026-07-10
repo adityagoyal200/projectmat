@@ -1,4 +1,8 @@
+import json
+from collections.abc import AsyncIterator
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -131,6 +135,56 @@ async def get_student_recommendations(
                 "raw_response": exc.raw_response,
             },
         ) from exc
+
+
+@router.get("/student-recommendations/{registration_number}/stream")
+async def stream_student_recommendations(
+    registration_number: str,
+    force: bool = False,
+    db: AsyncSession = Depends(get_db),
+) -> StreamingResponse:
+    """Server-Sent Events variant of student recommendations.
+
+    Emits the ranked list immediately (deterministic preliminary scores), then
+    one event per finalist as its LLM evaluation finishes, then a final
+    authoritative list — so the UI can render as results compute instead of
+    blocking on the whole batch. Errors are delivered as ``type: error`` events
+    because the SSE response status is already committed once streaming starts.
+    """
+    service = MatchService(db)
+
+    async def event_stream() -> AsyncIterator[str]:
+        try:
+            async for event in service.stream_recommend_projects_for_db_candidate(
+                registration_number, force=force
+            ):
+                yield f"data: {json.dumps(event)}\n\n"
+        except ValueError as exc:
+            payload = {"type": "error", "status": 404, "message": str(exc)}
+            yield f"data: {json.dumps(payload)}\n\n"
+        except MatchingUnavailableError as exc:
+            payload = {"type": "error", "status": 503, "message": str(exc)}
+            yield f"data: {json.dumps(payload)}\n\n"
+        except LlmEvaluationError as exc:
+            payload = {
+                "type": "error",
+                "status": 502,
+                "message": str(exc),
+                "raw_response": exc.raw_response,
+            }
+            yield f"data: {json.dumps(payload)}\n\n"
+        except Exception as exc:
+            payload = {"type": "error", "status": 500, "message": str(exc)}
+            yield f"data: {json.dumps(payload)}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.post(
