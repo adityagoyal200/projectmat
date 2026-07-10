@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import shutil
 import subprocess
 from typing import cast
 
@@ -80,6 +81,16 @@ class EvaluationService:
 
     def _launch_agy_agent(self, prompt: str) -> tuple[bool, str]:
         command = settings.AGY_COMMAND.strip() or "agy"
+
+        # A missing binary under `shell=True` does not raise — the shell starts,
+        # fails to find the command, prints "<cmd>: not found" to stderr and
+        # exits 127, so Popen reports success. Check for the binary up front so
+        # a not-installed agy is reported cleanly (→ AgentUnavailable) instead
+        # of leaking a shell error and claiming the agent launched.
+        if shutil.which(command) is None:
+            msg = f"agy command '{command}' not found on PATH; skipping agent."
+            logger.info(f"[AGY INITIALIZATION] {msg}")
+            return False, msg
 
         # Build command string for shell execution
         import shlex

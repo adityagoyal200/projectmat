@@ -21,6 +21,14 @@ services:
   ollama:
     image: ollama/ollama:latest
     container_name: projectmatchai-ollama
+    environment:
+      # Keep the model resident in RAM between matches (plenty of free RAM),
+      # avoiding a multi-second reload on each cold call.
+      OLLAMA_KEEP_ALIVE: "-1"
+      # Serve one request at a time so each gets the full CPU and finishes
+      # fast, instead of splitting cores across parallel requests (which on
+      # CPU makes every concurrent call crawl and blow the client timeout).
+      OLLAMA_NUM_PARALLEL: "1"
     ports:
       - "${OLLAMA_HOST_PORT:-11434}:11434"
     volumes:
