@@ -250,7 +250,7 @@ export function BatchScoreMatrix({ data }: Props) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         {/* Legend */}
         <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-          <span className="font-semibold text-foreground/70 text-[11px] uppercase tracking-wider">Composite score</span>
+          <span className="font-semibold text-foreground/70 text-[11px] uppercase tracking-wider">Pre-rank score</span>
           <span className="flex items-center gap-1.5">
             <span className="h-2 w-2 rounded-full bg-emerald-400" />≥ 60 strong
           </span>
@@ -299,6 +299,17 @@ export function BatchScoreMatrix({ data }: Props) {
         <span><span className="font-semibold text-foreground">{data.projects.length}</span> projects</span>
         <span><span className="font-semibold text-foreground">{data.scores.length}</span> pairs computed</span>
       </div>
+
+      {/* ── Scope note ── */}
+      <p className="rounded-xl border border-amber-500/15 bg-amber-500/[0.04] px-4 py-2.5 text-[11px] leading-relaxed text-muted-foreground">
+        <span className="font-semibold text-amber-300/80">Pre-rank score</span> is a fast,
+        deterministic ranking across the whole batch (skills, embeddings, prerequisites) — it
+        skips the LLM and per-student GitHub/repo fetch, so its numbers run low and are meant
+        for <span className="font-medium text-foreground/70">relative ordering only</span>. Open a
+        student in the <span className="font-medium text-foreground/70">Matching</span> tab for the
+        full <span className="font-medium text-foreground/70">match score</span> (LLM-evaluated,
+        with developer-profile data) — the two are not on the same scale.
+      </p>
 
       {/* ── Student grid ── */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
