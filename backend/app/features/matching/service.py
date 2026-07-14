@@ -1182,9 +1182,17 @@ class MatchService:
         has_workbook = any(f.file_type == "workbook" for f in batch.files)
         return not has_workbook and bool(batch.resumes_url)
 
-    async def recommend_projects_for_db_candidate(
-        self, registration_number: str, force: bool = False
-    ) -> StudentRecommendationsResponse:
+    async def _load_candidate_for_matching(
+        self, registration_number: str, import_batch_id: int | None
+    ) -> Candidate:
+        """Resolve a candidate by registration number, optionally scoped to one
+        import batch.
+
+        A registration number is only unique *within* a batch, so re-importing
+        the same roster leaves several candidates sharing one number. Pass
+        ``import_batch_id`` to pick the intended one; without it the most recent
+        candidate wins, rather than an arbitrary row.
+        """
         stmt = (
             select(Candidate)
             .options(
@@ -1194,13 +1202,32 @@ class MatchService:
                 selectinload(Candidate.live_app_evaluations),
             )
             .where(Candidate.registration_number == registration_number)
+            .order_by(Candidate.id.desc())
         )
+        if import_batch_id is not None:
+            stmt = stmt.where(Candidate.import_batch_id == import_batch_id)
+
         res = await self.db.execute(stmt)
         candidate = res.scalars().first()
         if not candidate:
-            raise ValueError(
-                f"Candidate with registration number {registration_number} not found."
+            scope = (
+                f" in batch {import_batch_id}" if import_batch_id is not None else ""
             )
+            raise ValueError(
+                f"Candidate with registration number "
+                f"{registration_number}{scope} not found."
+            )
+        return candidate
+
+    async def recommend_projects_for_db_candidate(
+        self,
+        registration_number: str,
+        force: bool = False,
+        import_batch_id: int | None = None,
+    ) -> StudentRecommendationsResponse:
+        candidate = await self._load_candidate_for_matching(
+            registration_number, import_batch_id
+        )
 
         batch_id = cast("int | None", candidate.import_batch_id)
         if not force:
@@ -1395,7 +1422,10 @@ class MatchService:
         )
 
     async def stream_recommend_projects_for_db_candidate(
-        self, registration_number: str, force: bool = False
+        self,
+        registration_number: str,
+        force: bool = False,
+        import_batch_id: int | None = None,
     ) -> AsyncIterator[dict]:
         """Streaming variant of recommend_projects_for_db_candidate.
 
@@ -1409,22 +1439,9 @@ class MatchService:
 
         A cache hit streams meta + done immediately (no recompute).
         """
-        stmt = (
-            select(Candidate)
-            .options(
-                selectinload(Candidate.skills).selectinload(CandidateSkill.skill),
-                selectinload(Candidate.documents),
-                selectinload(Candidate.repository_evaluations),
-                selectinload(Candidate.live_app_evaluations),
-            )
-            .where(Candidate.registration_number == registration_number)
+        candidate = await self._load_candidate_for_matching(
+            registration_number, import_batch_id
         )
-        res = await self.db.execute(stmt)
-        candidate = res.scalars().first()
-        if not candidate:
-            raise ValueError(
-                f"Candidate with registration number {registration_number} not found."
-            )
 
         batch_id = cast("int | None", candidate.import_batch_id)
         if not force:

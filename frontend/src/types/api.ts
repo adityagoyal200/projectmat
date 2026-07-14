@@ -62,6 +62,7 @@ export interface ImportBatchResponse {
 
 export interface Candidate {
   id: number;
+  import_batch_id?: number | null;
   registration_number: string;
   name: string;
   email?: string;

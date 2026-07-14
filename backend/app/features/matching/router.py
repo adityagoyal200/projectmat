@@ -110,10 +110,14 @@ async def download_batch_report(
 async def get_student_recommendations(
     registration_number: str,
     force: bool = False,
+    import_batch_id: int | None = None,
     db: AsyncSession = Depends(get_db),
 ) -> StudentRecommendationsResponse:
     """Retrieve ranked project recommendations for an existing candidate
     by registration number.
+
+    Registration numbers are only unique within a batch, so pass
+    ?import_batch_id= to disambiguate a student who was imported more than once.
 
     Results are cached per batch and served from the database on repeat calls.
     Pass ?force=true to bypass the cache and recompute.
@@ -121,7 +125,7 @@ async def get_student_recommendations(
     service = MatchService(db)
     try:
         return await service.recommend_projects_for_db_candidate(
-            registration_number, force=force
+            registration_number, force=force, import_batch_id=import_batch_id
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -141,6 +145,7 @@ async def get_student_recommendations(
 async def stream_student_recommendations(
     registration_number: str,
     force: bool = False,
+    import_batch_id: int | None = None,
     db: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
     """Server-Sent Events variant of student recommendations.
@@ -156,7 +161,7 @@ async def stream_student_recommendations(
     async def event_stream() -> AsyncIterator[str]:
         try:
             async for event in service.stream_recommend_projects_for_db_candidate(
-                registration_number, force=force
+                registration_number, force=force, import_batch_id=import_batch_id
             ):
                 yield f"data: {json.dumps(event)}\n\n"
         except ValueError as exc:

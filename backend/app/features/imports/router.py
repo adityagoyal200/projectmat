@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +12,7 @@ from app.features.imports.schemas import (
     ImportBatchSummary,
 )
 from app.features.imports.service import ImportBatchNotFoundError, WorkbookImportService
+from app.features.imports.template import build_workbook_template
 from app.features.mentors.models import Mentor
 from app.features.projects.models import Project
 
@@ -71,6 +72,20 @@ async def create_import_batch(
     """Create an empty import batch for workbook and resume files."""
     service = WorkbookImportService(db)
     return await service.create_batch()
+
+
+XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+# Declared ahead of /{batch_id} so "template" is not parsed as a batch id.
+@router.get("/template")
+async def download_workbook_template() -> Response:
+    """Download the blank workbook to fill in and upload."""
+    return Response(
+        content=build_workbook_template(),
+        media_type=XLSX_MEDIA_TYPE,
+        headers={"Content-Disposition": 'attachment; filename="import-template.xlsx"'},
+    )
 
 
 @router.get("/{batch_id}", response_model=ImportBatchResponse)

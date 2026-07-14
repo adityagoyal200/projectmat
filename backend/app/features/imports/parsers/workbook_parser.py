@@ -91,7 +91,18 @@ SHEET_CONFIG = {
     "Students Info": {
         "aliases": ["students info", "students", "students_info"],
         "required": ["name", "registration number"],
-        "optional": ["email", "phone", "file", "skills"],
+        "optional": [
+            "email",
+            "phone",
+            "file",
+            "skills",
+            "github username",
+            "leetcode username",
+            "codeforces username",
+            "kaggle username",
+            "scholar id",
+            "live project links",
+        ],
     },
     "Mentors info": {
         "aliases": ["mentors info", "mentors", "mentors_info"],

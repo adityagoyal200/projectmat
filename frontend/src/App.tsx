@@ -25,6 +25,7 @@ import { Input } from '@/components/ui/input';
 import client from '@/lib/api/client';
 import { downloadBatchReport } from '@/lib/api/report';
 import { streamMatchEvents } from '@/lib/api/stream';
+import { downloadWorkbookTemplate } from '@/lib/api/template';
 import { cn } from '@/lib/utils';
 import type {
   BatchScoreMatrixResponse,
@@ -118,6 +119,9 @@ export default function App() {
   const [selectedBatchDetails, setSelectedBatchDetails] = useState<ImportBatchResponse | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
+  const [templateDownloading, setTemplateDownloading] = useState(false);
+  const [templateError, setTemplateError] = useState<string | null>(null);
+
   const [driveUrl, setDriveUrl] = useState('');
   const [importingDrive, setImportingDrive] = useState(false);
   const [driveError, setDriveError] = useState<string | null>(null);
@@ -132,7 +136,10 @@ export default function App() {
   const [mentors, setMentors] = useState<Mentor[]>([]);
 
   // ── Match tab ─────────────────────────────────────────────────────────────
-  const [selectedCandidateReg, setSelectedCandidateReg] = useState('');
+  // Keyed by candidate id, not registration number: re-importing a roster or a
+  // Drive folder creates a second candidate for the same student, and the
+  // registration number no longer identifies exactly one of them.
+  const [selectedCandidateId, setSelectedCandidateId] = useState('');
   const [selectedProjectId, setSelectedProjectId] = useState('');
   const [candidateRecommendations, setCandidateRecommendations] = useState<MatchRecommendation[]>([]);
   const [studentMatchContext, setStudentMatchContext] = useState<{ candidateName: string; registrationNumber: string; cached: boolean } | null>(null);
@@ -190,6 +197,7 @@ export default function App() {
   const [editingDummyId, setEditingDummyId] = useState<number | null>(null);
 
   const [studentSourceFilter, setStudentSourceFilter] = useState<'all' | 'excel' | 'drive'>('all');
+  const [studentBatchFilter, setStudentBatchFilter] = useState<string>('all');
 
   const refreshDummyProjects = async () => {
     setDummyProjectsLoading(true);
@@ -315,6 +323,18 @@ export default function App() {
     }
   };
 
+  const handleTemplateDownload = async () => {
+    setTemplateDownloading(true);
+    setTemplateError(null);
+    try {
+      await downloadWorkbookTemplate();
+    } catch (e: unknown) {
+      setTemplateError(e instanceof Error ? e.message : 'Failed to download template');
+    } finally {
+      setTemplateDownloading(false);
+    }
+  };
+
   const handleDriveImport = async () => {
     if (!driveUrl) return;
     setImportingDrive(true);
@@ -412,15 +432,26 @@ export default function App() {
   };
 
   const loadCandidateRecs = async (force = false) => {
-    if (!selectedCandidateReg) return;
+    const candidate = candidates.find((c) => String(c.id) === selectedCandidateId);
+    if (!candidate) return;
     setMatchingLoading(true);
     setMatchError(null);
     setCandidateRecommendations([]);
+
+    // Registration numbers repeat across batches, so send the batch too — it
+    // pins the request to the exact student picked in the dropdown.
+    const params = new URLSearchParams();
+    if (force) params.set('force', 'true');
+    if (candidate.import_batch_id != null) {
+      params.set('import_batch_id', String(candidate.import_batch_id));
+    }
+    const query = params.toString();
+
     try {
       // Stream results: render the deterministic ranked list immediately, then
       // fill in each project's LLM score as it finishes computing.
       await streamMatchEvents(
-        `/matching/student-recommendations/${selectedCandidateReg}/stream${force ? '?force=true' : ''}`,
+        `/matching/student-recommendations/${encodeURIComponent(candidate.registration_number)}/stream${query ? `?${query}` : ''}`,
         (evt) => {
           if (evt.type === 'meta') {
             setStudentMatchContext({ candidateName: evt.candidate_name, registrationNumber: evt.registration_number, cached: evt.cached });
@@ -716,39 +747,73 @@ export default function App() {
                   ))}
                 </div>
 
-                {matchMode === 'student' && (
-                  <div className="flex flex-col gap-3 sm:flex-row">
-                    <select
-                      className="select-glass sm:w-48"
-                      value={studentSourceFilter}
-                      onChange={(e) => {
-                        setStudentSourceFilter(e.target.value as 'all' | 'excel' | 'drive');
-                        setSelectedCandidateReg('');
-                      }}
-                    >
-                      <option value="all">All Sources</option>
-                      <option value="excel">Excel Uploads</option>
-                      <option value="drive">Drive Link Uploads</option>
-                    </select>
-                    <select
-                      className="select-glass flex-1"
-                      value={selectedCandidateReg}
-                      onChange={(e) => setSelectedCandidateReg(e.target.value)}
-                    >
-                      <option value="">Select a student…</option>
-                      {candidates
-                        .filter((c) => studentSourceFilter === 'all' || c.source === studentSourceFilter)
-                        .map((c) => (
-                          <option key={c.id} value={c.registration_number}>
-                            {c.name} ({c.registration_number})
-                          </option>
-                        ))}
-                    </select>
-                    <Button onClick={() => loadCandidateRecs()} disabled={!selectedCandidateReg || matchingLoading} className="btn-glow sm:w-44">
-                      {matchingLoading ? 'Running…' : 'Match projects'}
-                    </Button>
-                  </div>
-                )}
+                {matchMode === 'student' && (() => {
+                  const visibleCandidates = candidates.filter(
+                    (c) =>
+                      (studentSourceFilter === 'all' || c.source === studentSourceFilter) &&
+                      (studentBatchFilter === 'all' || String(c.import_batch_id) === studentBatchFilter)
+                  );
+
+                  return (
+                    <div className="space-y-3">
+                      <div className="flex flex-col gap-3 sm:flex-row">
+                        <select
+                          className="select-glass sm:w-48"
+                          value={studentSourceFilter}
+                          onChange={(e) => {
+                            setStudentSourceFilter(e.target.value as 'all' | 'excel' | 'drive');
+                            setSelectedCandidateId('');
+                          }}
+                        >
+                          <option value="all">All Sources</option>
+                          <option value="excel">Excel Uploads</option>
+                          <option value="drive">Drive Link Uploads</option>
+                        </select>
+                        <select
+                          className="select-glass flex-1"
+                          value={studentBatchFilter}
+                          onChange={(e) => {
+                            setStudentBatchFilter(e.target.value);
+                            setSelectedCandidateId('');
+                          }}
+                        >
+                          <option value="all">All Batches</option>
+                          {importBatches.map((b) => (
+                            <option key={b.id} value={String(b.id)}>
+                              Batch #{b.id} · {b.candidate_count} student{b.candidate_count === 1 ? '' : 's'} ·{' '}
+                              {new Date(b.created_at).toLocaleDateString()}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="flex flex-col gap-3 sm:flex-row">
+                        <select
+                          className="select-glass flex-1"
+                          value={selectedCandidateId}
+                          onChange={(e) => setSelectedCandidateId(e.target.value)}
+                        >
+                          <option value="">Select a student…</option>
+                          {visibleCandidates.map((c) => (
+                            <option key={c.id} value={String(c.id)}>
+                              {c.name} ({c.registration_number})
+                              {c.import_batch_id != null ? ` — Batch #${c.import_batch_id}` : ''}
+                            </option>
+                          ))}
+                        </select>
+                        <Button onClick={() => loadCandidateRecs()} disabled={!selectedCandidateId || matchingLoading} className="btn-glow sm:w-44">
+                          {matchingLoading ? 'Running…' : 'Match projects'}
+                        </Button>
+                      </div>
+
+                      {visibleCandidates.length === 0 && (
+                        <p className="text-xs text-muted-foreground">
+                          No students match these filters. Widen the source or batch filter, or import a batch first.
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {matchMode === 'project' && (
                   <div className="flex flex-col gap-3 sm:flex-row">
@@ -1250,6 +1315,30 @@ export default function App() {
                     {uploading ? 'Processing…' : 'Upload'}
                   </Button>
                 </div>
+
+                <div className="flex flex-wrap items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3">
+                  <div className="flex-1 min-w-[14rem]">
+                    <p className="text-sm font-medium text-foreground">Not sure about the format?</p>
+                    <p className="text-xs text-muted-foreground">
+                      Download the blank workbook — the exact sheets, headers, and an example row for each.
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={handleTemplateDownload}
+                    disabled={templateDownloading}
+                    className="gap-2 border-white/10 bg-white/[0.03]"
+                  >
+                    <FileDown className="h-4 w-4" />
+                    {templateDownloading ? 'Preparing…' : 'Download template'}
+                  </Button>
+                </div>
+
+                {templateError && (
+                  <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+                    {templateError}
+                  </div>
+                )}
 
                 {uploadError && (
                   <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
